@@ -6,14 +6,26 @@ import com.aetherledger.domain.entity.LedgerTransaction;
 import com.aetherledger.exception.AccountNotFoundException;
 import com.aetherledger.exception.DuplicateReferenceIdException;
 import com.aetherledger.exception.InvalidTransactionRequestException;
+import com.aetherledger.exception.LedgerTransactionNotFoundException;
+import com.aetherledger.domain.enums.ExternalStatus;
+import com.aetherledger.exception.TransactionAlreadyReversedException;
+import com.aetherledger.exception.TransactionNotCompletableException;
+import com.aetherledger.exception.TransactionNotFailableException;
+import com.aetherledger.exception.TransactionNotReversibleException;
+import com.aetherledger.domain.enums.TransactionStatus;
 import com.aetherledger.repository.AccountRepository;
+import com.aetherledger.repository.LedgerEntryRepository;
 import com.aetherledger.repository.LedgerTransactionRepository;
 import com.aetherledger.service.command.PostTransactionCommand;
+import com.aetherledger.service.command.ReverseTransactionCommand;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -51,6 +63,7 @@ public class LedgerTransactionService {
 
     private final AccountRepository accountRepository;
     private final LedgerTransactionRepository ledgerTransactionRepository;
+    private final LedgerEntryRepository ledgerEntryRepository;
 
     /**
      * Posts a double-entry ledger transaction atomically.
@@ -68,6 +81,9 @@ public class LedgerTransactionService {
      */
     @Transactional(rollbackFor = Exception.class)
     public LedgerTransaction post(PostTransactionCommand command) {
+        log.debug("Posting ledger transaction: referenceId='{}' debitAccountId={} creditAccountId={} amount={}",
+            command.referenceId(), command.debitAccountId(), command.creditAccountId(), command.amount());
+
         validateCommand(command);
         rejectDuplicateReferenceId(command.referenceId());
 
@@ -93,13 +109,15 @@ public class LedgerTransactionService {
         try {
             ledgerTx = ledgerTransactionRepository.save(ledgerTx);
         } catch (DataIntegrityViolationException ex) {
-            // Guards the race window between the existence check above and the
-            // INSERT — the UNIQUE constraint is the final enforcement barrier.
-            log.warn("Duplicate referenceId detected at INSERT: {}", command.referenceId());
+            // Guards the race window between the pre-flight check and the INSERT.
+            // The idx_ledger_transaction_reference_id UNIQUE constraint is the
+            // final enforcement barrier against concurrent duplicate submissions.
+            log.warn("Duplicate referenceId='{}' detected at INSERT — concurrent request race",
+                command.referenceId());
             throw new DuplicateReferenceIdException(command.referenceId());
         }
 
-        log.info("Ledger transaction posted: id={} referenceId={} debit={} credit={} amount={}",
+        log.info("Ledger transaction posted: id={} referenceId='{}' debitAccountId={} creditAccountId={} amount={}",
             ledgerTx.getId(),
             ledgerTx.getReferenceId(),
             command.debitAccountId(),
@@ -108,6 +126,279 @@ public class LedgerTransactionService {
         );
 
         return ledgerTx;
+    }
+
+    // -------------------------------------------------------------------------
+    // Pending lifecycle
+    // -------------------------------------------------------------------------
+
+    /**
+     * Creates a {@link LedgerTransaction} in {@code PENDING} state without
+     * creating any ledger entries.  The debit/credit intent is captured on the
+     * transaction so it can be materialised later by {@link #complete}.
+     *
+     * @throws InvalidTransactionRequestException if the command fails business validation
+     * @throws AccountNotFoundException           if either account does not exist
+     * @throws DuplicateReferenceIdException      if the referenceId has already been used
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public LedgerTransaction createPending(PostTransactionCommand command) {
+        log.debug("Creating pending transaction: referenceId='{}' debitAccountId={} creditAccountId={} amount={}",
+            command.referenceId(), command.debitAccountId(), command.creditAccountId(), command.amount());
+
+        validateCommand(command);
+        rejectDuplicateReferenceId(command.referenceId());
+
+        // Validate accounts exist; no lock needed — no entries are created yet
+        requireAccountExists(command.debitAccountId(),  "debitAccountId");
+        requireAccountExists(command.creditAccountId(), "creditAccountId");
+
+        LedgerTransaction tx = LedgerTransaction.createPending(
+            command.referenceId(),
+            command.debitAccountId(),
+            command.creditAccountId(),
+            command.amount()
+        );
+
+        try {
+            tx = ledgerTransactionRepository.save(tx);
+        } catch (DataIntegrityViolationException ex) {
+            log.warn("Duplicate referenceId='{}' detected at INSERT (pending) — concurrent request race",
+                command.referenceId());
+            throw new DuplicateReferenceIdException(command.referenceId());
+        }
+
+        log.info("Pending transaction created: id={} referenceId='{}' debitAccountId={} creditAccountId={} amount={}",
+            tx.getId(), tx.getReferenceId(),
+            command.debitAccountId(), command.creditAccountId(), command.amount());
+
+        return tx;
+    }
+
+    /**
+     * Transitions a {@code PENDING} transaction to {@code SUCCESS} and creates
+     * the two {@link LedgerEntry} records that affect account balances.
+     *
+     * @throws LedgerTransactionNotFoundException if the transaction does not exist
+     * @throws TransactionNotCompletableException if the transaction is not PENDING
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public LedgerTransaction complete(UUID transactionId) {
+        log.debug("Completing pending transaction: id={}", transactionId);
+
+        LedgerTransaction tx = ledgerTransactionRepository.findByIdWithLock(transactionId)
+            .orElseThrow(() -> new LedgerTransactionNotFoundException("id", transactionId.toString()));
+
+        if (tx.getStatus() != TransactionStatus.PENDING) {
+            throw new TransactionNotCompletableException(transactionId, tx.getStatus());
+        }
+
+        LockedAccounts accounts = lockAccountsInConsistentOrder(
+            tx.getDebitAccountId(), tx.getCreditAccountId());
+
+        LedgerEntry.debit(accounts.debit(),   tx, tx.getAmount().negate());
+        LedgerEntry.credit(accounts.credit(), tx, tx.getAmount());
+
+        assertDoubleEntryInvariant(tx);
+        tx.markAsSuccess();
+        tx = ledgerTransactionRepository.save(tx);
+
+        log.info("Pending transaction completed: id={} referenceId='{}' amount={}",
+            tx.getId(), tx.getReferenceId(), tx.getAmount());
+
+        return tx;
+    }
+
+    /**
+     * Transitions a {@code PENDING} transaction to {@code FAILED}.
+     * No ledger entries are created; the ledger remains unaffected.
+     *
+     * @throws LedgerTransactionNotFoundException if the transaction does not exist
+     * @throws TransactionNotFailableException    if the transaction is not PENDING
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public LedgerTransaction fail(UUID transactionId) {
+        log.debug("Failing pending transaction: id={}", transactionId);
+
+        LedgerTransaction tx = ledgerTransactionRepository.findByIdWithLock(transactionId)
+            .orElseThrow(() -> new LedgerTransactionNotFoundException("id", transactionId.toString()));
+
+        if (tx.getStatus() != TransactionStatus.PENDING) {
+            throw new TransactionNotFailableException(transactionId, tx.getStatus());
+        }
+
+        tx.markAsFailed();
+        tx = ledgerTransactionRepository.save(tx);
+
+        log.info("Pending transaction failed: id={} referenceId='{}'",
+            tx.getId(), tx.getReferenceId());
+
+        return tx;
+    }
+
+    // -------------------------------------------------------------------------
+    // Reversal
+    // -------------------------------------------------------------------------
+
+    /**
+     * Reverses a previously posted transaction by creating a compensating
+     * {@link LedgerTransaction} with two mirror-image {@link LedgerEntry} rows:
+     * the original debit account is credited and the original credit account is
+     * debited by the same absolute amount.
+     *
+     * <p>Both the original and the new reversal transaction are saved atomically.
+     * The original gains a {@code reversedByTransactionId} linkage; the reversal
+     * carries a {@code reversalOfTransactionId} linkage for full audit traceability.
+     *
+     * @param command the validated reversal request
+     * @return the persisted reversal {@link LedgerTransaction} in {@code SUCCESS} state
+     * @throws LedgerTransactionNotFoundException  if the original transaction does not exist
+     * @throws TransactionNotReversibleException   if the original is not in {@code SUCCESS} state
+     * @throws TransactionAlreadyReversedException if the original has already been reversed
+     * @throws DuplicateReferenceIdException       if the reversal referenceId has already been used
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public LedgerTransaction reverse(ReverseTransactionCommand command) {
+        log.debug("Reversing transaction: originalId={} reversalReferenceId='{}'",
+            command.originalTransactionId(), command.reversalReferenceId());
+
+        rejectDuplicateReferenceId(command.reversalReferenceId());
+
+        // Lock the original transaction row to guard against concurrent reversal attempts.
+        LedgerTransaction original = ledgerTransactionRepository
+            .findByIdWithLock(command.originalTransactionId())
+            .orElseThrow(() -> new LedgerTransactionNotFoundException(
+                "id", command.originalTransactionId().toString()));
+
+        if (original.getStatus() != TransactionStatus.SUCCESS) {
+            throw new TransactionNotReversibleException(original.getId(), original.getStatus());
+        }
+        if (original.getReversedByTransactionId() != null) {
+            throw new TransactionAlreadyReversedException(original.getId());
+        }
+
+        // Fetch the original entries together with their accounts (no N+1).
+        List<LedgerEntry> originalEntries = ledgerEntryRepository
+            .findByLedgerTransactionIdWithAccount(original.getId());
+
+        LedgerEntry originalDebit  = originalEntries.stream()
+            .filter(LedgerEntry::isDebit)
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException(
+                "No debit entry found for transaction " + original.getId()));
+        LedgerEntry originalCredit = originalEntries.stream()
+            .filter(LedgerEntry::isCredit)
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException(
+                "No credit entry found for transaction " + original.getId()));
+
+        // Lock accounts in consistent UUID order (same pattern as post()).
+        Account debitAccount  = originalDebit.getAccount();
+        Account creditAccount = originalCredit.getAccount();
+        lockAccountsInConsistentOrder(debitAccount.getId(), creditAccount.getId());
+
+        // Reversal flips the direction: original debit account is credited,
+        // original credit account is debited.
+        BigDecimal positiveAmount = originalCredit.getAmount(); // always > 0
+
+        LedgerTransaction reversal = LedgerTransaction.createReversal(
+            command.reversalReferenceId(), original.getId());
+
+        LedgerEntry.debit(creditAccount, reversal, positiveAmount.negate());
+        LedgerEntry.credit(debitAccount, reversal, positiveAmount);
+
+        assertDoubleEntryInvariant(reversal);
+        reversal.markAsSuccess();
+
+        try {
+            reversal = ledgerTransactionRepository.save(reversal);
+        } catch (DataIntegrityViolationException ex) {
+            log.warn("Duplicate referenceId='{}' detected at INSERT during reversal — concurrent request race",
+                command.reversalReferenceId());
+            throw new DuplicateReferenceIdException(command.reversalReferenceId());
+        }
+
+        // Atomically link the original to its reversal for audit.
+        original.markAsReversedBy(reversal.getId());
+        ledgerTransactionRepository.save(original);
+
+        log.info("Transaction reversed: originalId={} reversalId={} reversalReferenceId='{}'",
+            original.getId(), reversal.getId(), reversal.getReferenceId());
+
+        return reversal;
+    }
+
+    // -------------------------------------------------------------------------
+    // Reconciliation
+    // -------------------------------------------------------------------------
+
+    /**
+     * Records the external provider's view of a transaction and derives its
+     * reconciliation result.  Calling this method a second time overwrites the
+     * previous values, enabling re-reconcile and correction workflows.
+     *
+     * @throws LedgerTransactionNotFoundException if the transaction does not exist
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public LedgerTransaction reconcile(UUID transactionId,
+                                       String externalReferenceId,
+                                       ExternalStatus externalStatus) {
+        log.debug("Reconciling transaction: id={} externalReferenceId='{}' externalStatus={}",
+            transactionId, externalReferenceId, externalStatus);
+
+        LedgerTransaction tx = ledgerTransactionRepository.findById(transactionId)
+            .orElseThrow(() -> new LedgerTransactionNotFoundException("id", transactionId.toString()));
+
+        tx.reconcile(externalReferenceId, externalStatus);
+        tx = ledgerTransactionRepository.save(tx);
+
+        log.info("Transaction reconciled: id={} externalReferenceId='{}' externalStatus={} result={}",
+            tx.getId(), tx.getExternalReferenceId(), tx.getExternalStatus(),
+            tx.computeReconciliationResult());
+
+        return tx;
+    }
+
+    /**
+     * Returns all transactions whose reconciliation result is not {@link
+     * com.aetherledger.domain.enums.ReconciliationResult#MATCHED}, ordered newest first.
+     */
+    @Transactional(readOnly = true)
+    public List<LedgerTransaction> listReconciliationIssues() {
+        return ledgerTransactionRepository.findReconciliationIssues();
+    }
+
+    // -------------------------------------------------------------------------
+    // Read operations
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns the full transaction detail including both ledger entries and
+     * their associated account names.  Entries and accounts are fetched in a
+     * single JOIN FETCH query — no N+1.
+     */
+    @Transactional(readOnly = true)
+    public LedgerTransaction getById(UUID id) {
+        return ledgerTransactionRepository.findByIdWithEntries(id)
+            .orElseThrow(() -> new LedgerTransactionNotFoundException("id", id.toString()));
+    }
+
+    /**
+     * Same as {@link #getById} but keyed on the caller-supplied idempotency token.
+     */
+    @Transactional(readOnly = true)
+    public LedgerTransaction getByReferenceId(String referenceId) {
+        return ledgerTransactionRepository.findByReferenceIdWithEntries(referenceId)
+            .orElseThrow(() -> new LedgerTransactionNotFoundException("referenceId", referenceId));
+    }
+
+    /**
+     * Returns a page of transactions ordered by the caller-supplied {@link Pageable}.
+     * Callers must set the sort direction; this method does not impose an ordering.
+     */
+    @Transactional(readOnly = true)
+    public Page<LedgerTransaction> list(Pageable pageable) {
+        return ledgerTransactionRepository.findAll(pageable);
     }
 
     // -------------------------------------------------------------------------
@@ -138,8 +429,15 @@ public class LedgerTransactionService {
         }
     }
 
+    private void requireAccountExists(UUID accountId, String field) {
+        if (!accountRepository.existsById(accountId)) {
+            throw new AccountNotFoundException(accountId, field);
+        }
+    }
+
     private void rejectDuplicateReferenceId(String referenceId) {
         if (ledgerTransactionRepository.existsByReferenceId(referenceId)) {
+            log.warn("Rejected duplicate referenceId='{}' — transaction already committed", referenceId);
             throw new DuplicateReferenceIdException(referenceId);
         }
     }

@@ -1,6 +1,7 @@
 package com.aetherledger.api;
 
 import com.aetherledger.api.dto.AccountCreatedResponse;
+import com.aetherledger.api.dto.AccountLedgerEntryResponse;
 import com.aetherledger.api.dto.AccountResponse;
 import com.aetherledger.api.dto.CreateAccountRequest;
 import com.aetherledger.service.AccountService;
@@ -38,6 +39,13 @@ public class AccountController {
     public List<AccountResponse> list() {
         return accountService.list().stream()
             .map(awb -> AccountResponse.from(awb.account(), awb.currentBalance()))
+            .toList();
+    }
+
+    @GetMapping("/{id}/entries")
+    public List<AccountLedgerEntryResponse> getLedgerHistory(@PathVariable UUID id) {
+        return accountService.getLedgerHistory(id).stream()
+            .map(AccountLedgerEntryResponse::from)
             .toList();
     }
 }

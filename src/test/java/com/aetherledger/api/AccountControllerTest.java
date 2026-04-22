@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -97,6 +98,16 @@ class AccountControllerTest {
             }
 
             @Test
+            @DisplayName("leading and trailing whitespace is stripped from name before saving")
+            void create_nameWithSurroundingWhitespace_isTrimmed() throws Exception {
+                mockMvc.perform(post(ENDPOINT)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(toJson(createRequest("  Alice  ", "USER"))))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.name").value("Alice"));
+            }
+
+            @Test
             @DisplayName("two accounts with distinct names both succeed")
             void create_distinctNames_bothSucceed() throws Exception {
                 mockMvc.perform(post(ENDPOINT)
@@ -147,6 +158,18 @@ class AccountControllerTest {
                 mockMvc.perform(post(ENDPOINT)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(body)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"));
+            }
+
+            @Test
+            @DisplayName("name longer than 100 characters returns 400 with VALIDATION_FAILED")
+            void create_nameTooLong_returns400() throws Exception {
+                String longName = "A".repeat(101);
+
+                mockMvc.perform(post(ENDPOINT)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(toJson(createRequest(longName, "USER"))))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"));
             }
@@ -314,6 +337,85 @@ class AccountControllerTest {
             mockMvc.perform(get(ENDPOINT + "/{id}", reserve.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentBalance").value(-300.00));
+        }
+    }
+
+    // =========================================================================
+    // GET /api/v1/accounts/{id}/entries
+    // =========================================================================
+
+    @Nested
+    @DisplayName("GET /api/v1/accounts/{id}/entries")
+    class GetLedgerHistory {
+
+        @Test
+        @DisplayName("returns empty list when account has no ledger entries")
+        void getLedgerHistory_noEntries_returnsEmptyList() throws Exception {
+            Account account = accountRepository.save(Account.of("Silent Wallet", AccountType.USER));
+
+            mockMvc.perform(get(ENDPOINT + "/{id}/entries", account.getId()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$").isEmpty());
+        }
+
+        @Test
+        @DisplayName("returns 404 with ACCOUNT_NOT_FOUND for unknown account id")
+        void getLedgerHistory_unknownAccount_returns404() throws Exception {
+            mockMvc.perform(get(ENDPOINT + "/{id}/entries", UUID.randomUUID()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("ACCOUNT_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("returns only entries belonging to the requested account")
+        void getLedgerHistory_returnsEntriesForRequestedAccountOnly() throws Exception {
+            Account alice   = accountRepository.save(Account.of("Alice", AccountType.USER));
+            Account charlie = accountRepository.save(Account.of("Charlie", AccountType.SYSTEM));
+
+            postTransaction(alice.getId(), charlie.getId(), new BigDecimal("75.00"), "REF-HIST-001");
+
+            // Alice has exactly 1 entry (the debit)
+            mockMvc.perform(get(ENDPOINT + "/{id}/entries", alice.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].entryId").isNotEmpty())
+                .andExpect(jsonPath("$[0].transactionId").isNotEmpty())
+                .andExpect(jsonPath("$[0].referenceId").value("REF-HIST-001"))
+                .andExpect(jsonPath("$[0].amount").value(-75.00))
+                .andExpect(jsonPath("$[0].createdAt").isNotEmpty());
+
+            // Charlie has exactly 1 entry (the credit)
+            mockMvc.perform(get(ENDPOINT + "/{id}/entries", charlie.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].amount").value(75.00));
+        }
+
+        @Test
+        @DisplayName("entries are ordered newest first across multiple transactions")
+        void getLedgerHistory_multipleTransactions_newestFirst() throws Exception {
+            Account wallet  = accountRepository.save(Account.of("Wallet",  AccountType.USER));
+            Account reserve = accountRepository.save(Account.of("Reserve", AccountType.SYSTEM));
+
+            postTransaction(reserve.getId(), wallet.getId(), new BigDecimal("100.00"), "REF-HIST-FIRST");
+            postTransaction(reserve.getId(), wallet.getId(), new BigDecimal("200.00"), "REF-HIST-SECOND");
+            postTransaction(reserve.getId(), wallet.getId(), new BigDecimal("300.00"), "REF-HIST-THIRD");
+
+            var result = mockMvc.perform(get(ENDPOINT + "/{id}/entries", wallet.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(3)))
+                .andReturn();
+
+            var entries = objectMapper.readTree(result.getResponse().getContentAsString());
+            // Newest first: amounts should be 300, 200, 100
+            assertThat(entries.get(0).get("amount").decimalValue())
+                .isEqualByComparingTo(new BigDecimal("300.0000"));
+            assertThat(entries.get(1).get("amount").decimalValue())
+                .isEqualByComparingTo(new BigDecimal("200.0000"));
+            assertThat(entries.get(2).get("amount").decimalValue())
+                .isEqualByComparingTo(new BigDecimal("100.0000"));
         }
     }
 

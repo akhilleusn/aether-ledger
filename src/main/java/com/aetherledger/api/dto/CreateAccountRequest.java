@@ -7,8 +7,8 @@ import jakarta.validation.constraints.Size;
 
 public record CreateAccountRequest(
 
-    @NotBlank(message = "name is required")
-    @Size(max = 255, message = "name must not exceed 255 characters")
+    @NotBlank(message = "name must not be blank")
+    @Size(max = 100, message = "name must not exceed 100 characters")
     String name,
 
     @NotNull(message = "type is required")

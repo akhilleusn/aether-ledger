@@ -1,6 +1,7 @@
 package com.aetherledger.repository;
 
 import com.aetherledger.domain.entity.LedgerTransaction;
+import com.aetherledger.domain.enums.ExternalStatus;
 import com.aetherledger.domain.enums.TransactionStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -36,14 +37,98 @@ public interface LedgerTransactionRepository extends JpaRepository<LedgerTransac
     Optional<LedgerTransaction> findByIdWithLock(@Param("id") UUID id);
 
     /**
-     * Eager JOIN FETCH to avoid N+1 when the caller needs both the
-     * transaction and all of its ledger entries in a single round-trip.
+     * Fetches a transaction with its two entries and each entry's account in
+     * a single query, avoiding N+1 round-trips when the caller needs the full
+     * audit detail (entry amounts, account names).
      */
     @Query("""
         SELECT DISTINCT t
         FROM LedgerTransaction t
-        LEFT JOIN FETCH t.ledgerEntries
+        LEFT JOIN FETCH t.ledgerEntries e
+        LEFT JOIN FETCH e.account
         WHERE t.id = :id
         """)
     Optional<LedgerTransaction> findByIdWithEntries(@Param("id") UUID id);
+
+    // -------------------------------------------------------------------------
+    // Reconciliation aggregate queries — used by the summary endpoint
+    // -------------------------------------------------------------------------
+
+    /** Transactions that have never been reconciled ({@code reconciledAt} is null). */
+    @Query("SELECT COUNT(t) FROM LedgerTransaction t WHERE t.reconciledAt IS NULL")
+    long countNotReconciled();
+
+    /**
+     * Transactions where a reconcile call was made but the external reference
+     * or external status is absent, yielding {@code MISSING_EXTERNAL_REFERENCE}.
+     */
+    @Query("""
+        SELECT COUNT(t) FROM LedgerTransaction t
+        WHERE t.reconciledAt IS NOT NULL
+        AND (t.externalReferenceId IS NULL OR t.externalStatus IS NULL)
+        """)
+    long countMissingExternalReference();
+
+    /**
+     * Transactions where internal and external statuses align, yielding {@code MATCHED}.
+     * Mirrors the logic in {@link com.aetherledger.domain.entity.LedgerTransaction#computeReconciliationResult()}.
+     */
+    @Query("""
+        SELECT COUNT(t) FROM LedgerTransaction t
+        WHERE t.reconciledAt IS NOT NULL
+        AND t.externalReferenceId IS NOT NULL
+        AND t.externalStatus IS NOT NULL
+        AND (
+            (t.status = com.aetherledger.domain.enums.TransactionStatus.SUCCESS
+             AND t.externalStatus = com.aetherledger.domain.enums.ExternalStatus.SUCCESS)
+            OR (t.status = com.aetherledger.domain.enums.TransactionStatus.FAILED
+                AND t.externalStatus = com.aetherledger.domain.enums.ExternalStatus.FAILED)
+            OR (t.status = com.aetherledger.domain.enums.TransactionStatus.PENDING
+                AND t.externalStatus = com.aetherledger.domain.enums.ExternalStatus.PENDING)
+        )
+        """)
+    long countMatched();
+
+    /**
+     * Returns every transaction whose reconciliation result is not {@code MATCHED}.
+     *
+     * <p>A transaction is considered an "issue" when any of the following is true:
+     * <ul>
+     *   <li>{@code reconciledAt} is null (never reconciled)</li>
+     *   <li>{@code externalReferenceId} is null (reference missing)</li>
+     *   <li>{@code externalStatus} is null (status missing)</li>
+     *   <li>Internal and external statuses disagree (STATUS_MISMATCH)</li>
+     * </ul>
+     *
+     * Ordered newest first to surface recent discrepancies at the top.
+     */
+    @Query("""
+        SELECT t FROM LedgerTransaction t
+        WHERE t.reconciledAt IS NULL
+           OR t.externalReferenceId IS NULL
+           OR t.externalStatus IS NULL
+           OR NOT (
+               (t.status = com.aetherledger.domain.enums.TransactionStatus.SUCCESS
+                AND t.externalStatus = com.aetherledger.domain.enums.ExternalStatus.SUCCESS)
+               OR (t.status = com.aetherledger.domain.enums.TransactionStatus.FAILED
+                   AND t.externalStatus = com.aetherledger.domain.enums.ExternalStatus.FAILED)
+               OR (t.status = com.aetherledger.domain.enums.TransactionStatus.PENDING
+                   AND t.externalStatus = com.aetherledger.domain.enums.ExternalStatus.PENDING)
+           )
+        ORDER BY t.createdAt DESC
+        """)
+    List<LedgerTransaction> findReconciliationIssues();
+
+    /**
+     * Same as {@link #findByIdWithEntries} but keyed on the caller-supplied
+     * idempotency token rather than the system-assigned UUID.
+     */
+    @Query("""
+        SELECT DISTINCT t
+        FROM LedgerTransaction t
+        LEFT JOIN FETCH t.ledgerEntries e
+        LEFT JOIN FETCH e.account
+        WHERE t.referenceId = :referenceId
+        """)
+    Optional<LedgerTransaction> findByReferenceIdWithEntries(@Param("referenceId") String referenceId);
 }

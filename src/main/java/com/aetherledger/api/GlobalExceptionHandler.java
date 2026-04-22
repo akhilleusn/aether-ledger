@@ -5,7 +5,13 @@ import com.aetherledger.exception.AccountNotFoundException;
 import com.aetherledger.exception.DuplicateAccountNameException;
 import com.aetherledger.exception.DuplicateReferenceIdException;
 import com.aetherledger.exception.InvalidTransactionRequestException;
+import com.aetherledger.exception.LedgerTransactionNotFoundException;
+import com.aetherledger.exception.TransactionAlreadyReversedException;
+import com.aetherledger.exception.TransactionNotCompletableException;
+import com.aetherledger.exception.TransactionNotFailableException;
+import com.aetherledger.exception.TransactionNotReversibleException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -77,6 +83,37 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", detail, request);
     }
 
+    @ExceptionHandler(ConstraintViolationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleConstraintViolation(
+            ConstraintViolationException ex,
+            HttpServletRequest request) {
+
+        String detail = ex.getConstraintViolations().stream()
+            .map(cv -> {
+                String path = cv.getPropertyPath().toString();
+                // Strip method-name prefix (e.g. "list.size" → "size")
+                int dot = path.lastIndexOf('.');
+                String param = dot >= 0 ? path.substring(dot + 1) : path;
+                return param + ": " + cv.getMessage();
+            })
+            .sorted()
+            .collect(Collectors.joining("; "));
+
+        log.warn("Constraint violation on {}: {}", request.getRequestURI(), detail);
+        return error(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", detail, request);
+    }
+
+    @ExceptionHandler(LedgerTransactionNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleLedgerTransactionNotFound(
+            LedgerTransactionNotFoundException ex,
+            HttpServletRequest request) {
+
+        log.warn("Ledger transaction not found on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.NOT_FOUND, "TRANSACTION_NOT_FOUND", ex.getMessage(), request);
+    }
+
     @ExceptionHandler(AccountNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ErrorResponse handleAccountNotFound(
@@ -95,6 +132,46 @@ public class GlobalExceptionHandler {
 
         log.warn("Duplicate account name on {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.CONFLICT, "DUPLICATE_ACCOUNT_NAME", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(TransactionNotCompletableException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    public ErrorResponse handleTransactionNotCompletable(
+            TransactionNotCompletableException ex,
+            HttpServletRequest request) {
+
+        log.warn("Transaction not completable on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, "TRANSACTION_NOT_COMPLETABLE", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(TransactionNotFailableException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    public ErrorResponse handleTransactionNotFailable(
+            TransactionNotFailableException ex,
+            HttpServletRequest request) {
+
+        log.warn("Transaction not failable on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, "TRANSACTION_NOT_FAILABLE", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(TransactionAlreadyReversedException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleTransactionAlreadyReversed(
+            TransactionAlreadyReversedException ex,
+            HttpServletRequest request) {
+
+        log.warn("Transaction already reversed on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.CONFLICT, "TRANSACTION_ALREADY_REVERSED", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(TransactionNotReversibleException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    public ErrorResponse handleTransactionNotReversible(
+            TransactionNotReversibleException ex,
+            HttpServletRequest request) {
+
+        log.warn("Transaction not reversible on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, "TRANSACTION_NOT_REVERSIBLE", ex.getMessage(), request);
     }
 
     @ExceptionHandler(DuplicateReferenceIdException.class)

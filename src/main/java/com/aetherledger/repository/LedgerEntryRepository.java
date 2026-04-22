@@ -51,6 +51,35 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, UUID> 
     List<AccountBalanceSummary> sumAmountGroupByAccountId();
 
     /**
+     * Fetches all entries for an account together with their parent transaction
+     * in a single query, ordered newest first.  The JOIN FETCH on
+     * {@code ledgerTransaction} avoids lazy-load round-trips when the caller
+     * needs {@code referenceId} from the parent.
+     */
+    @Query("""
+        SELECT e
+        FROM   LedgerEntry e
+        JOIN FETCH e.ledgerTransaction
+        WHERE  e.account.id = :accountId
+        ORDER BY e.createdAt DESC
+        """)
+    List<LedgerEntry> findByAccountIdWithTransaction(@Param("accountId") UUID accountId);
+
+    /**
+     * Fetches all entries for a transaction together with their associated account,
+     * in a single query.  Used by the reversal service to read original entries
+     * without triggering lazy-load round-trips on account data.
+     */
+    @Query("""
+        SELECT e
+        FROM   LedgerEntry e
+        JOIN FETCH e.account
+        WHERE  e.ledgerTransaction.id = :ledgerTransactionId
+        """)
+    List<LedgerEntry> findByLedgerTransactionIdWithAccount(
+        @Param("ledgerTransactionId") UUID ledgerTransactionId);
+
+    /**
      * Verifies the double-entry zero-sum invariant for a given transaction.
      * A healthy transaction returns exactly {@code 0}.  Any other value
      * indicates data corruption and must be treated as a critical error.

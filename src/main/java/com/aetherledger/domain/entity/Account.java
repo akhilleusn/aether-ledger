@@ -17,6 +17,9 @@ import java.util.UUID;
     name = "accounts",
     indexes = {
         @Index(name = "idx_account_type", columnList = "type")
+    },
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uq_account_name", columnNames = "name")
     }
 )
 public class Account {
@@ -27,7 +30,7 @@ public class Account {
     private UUID id;
 
     @NotBlank
-    @Column(name = "name", nullable = false, length = 255)
+    @Column(name = "name", nullable = false, length = 100)
     private String name;
 
     @NotNull
