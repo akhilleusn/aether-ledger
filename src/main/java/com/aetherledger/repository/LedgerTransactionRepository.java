@@ -131,4 +131,73 @@ public interface LedgerTransactionRepository extends JpaRepository<LedgerTransac
         WHERE t.referenceId = :referenceId
         """)
     Optional<LedgerTransaction> findByReferenceIdWithEntries(@Param("referenceId") String referenceId);
+
+    // -------------------------------------------------------------------------
+    // Integrity aggregate queries — used by the ops/integrity endpoints
+    // -------------------------------------------------------------------------
+
+    /** Count of transactions in a given status — used for the ledger integrity summary. */
+    long countByStatus(TransactionStatus status);
+
+    /** Count of transactions that have been reversed (reversedByTransactionId is set). */
+    @Query("SELECT COUNT(t) FROM LedgerTransaction t WHERE t.reversedByTransactionId IS NOT NULL")
+    long countReversed();
+
+    /**
+     * Count of SUCCESS transactions whose ledger entries do not sum to zero.
+     * Only considers transactions that actually have entries (SUM IS NOT NULL);
+     * a SUCCESS transaction with zero entries is caught by {@link #countUnexpectedEntryCount}.
+     */
+    @Query("""
+        SELECT COUNT(t) FROM LedgerTransaction t
+        WHERE t.status = com.aetherledger.domain.enums.TransactionStatus.SUCCESS
+        AND (SELECT SUM(e.amount) FROM LedgerEntry e WHERE e.ledgerTransaction.id = t.id)
+              IS NOT NULL
+        AND (SELECT SUM(e.amount) FROM LedgerEntry e WHERE e.ledgerTransaction.id = t.id) <> 0
+        """)
+    long countZeroSumViolations();
+
+    /**
+     * Count of transactions with an entry count inconsistent with their status:
+     * SUCCESS must have exactly 2; PENDING and FAILED must have 0.
+     */
+    @Query("""
+        SELECT COUNT(t) FROM LedgerTransaction t
+        WHERE (t.status = com.aetherledger.domain.enums.TransactionStatus.SUCCESS
+               AND (SELECT COUNT(e) FROM LedgerEntry e WHERE e.ledgerTransaction.id = t.id) <> 2)
+           OR ((t.status = com.aetherledger.domain.enums.TransactionStatus.PENDING
+                OR t.status = com.aetherledger.domain.enums.TransactionStatus.FAILED)
+               AND (SELECT COUNT(e) FROM LedgerEntry e WHERE e.ledgerTransaction.id = t.id) > 0)
+        """)
+    long countUnexpectedEntryCount();
+
+    /**
+     * Returns every transaction that has at least one integrity violation, together
+     * with its entry count and entry sum so the service can classify issue types
+     * without additional round-trips.
+     *
+     * <p>Each element of the returned list is an {@code Object[3]}:
+     * <ol>
+     *   <li>[0] — {@link com.aetherledger.domain.entity.LedgerTransaction}</li>
+     *   <li>[1] — {@code Long} entry count</li>
+     *   <li>[2] — {@code BigDecimal} entry sum, or {@code null} when the transaction has no entries</li>
+     * </ol>
+     */
+    @Query("""
+        SELECT t,
+               (SELECT COUNT(e) FROM LedgerEntry e WHERE e.ledgerTransaction.id = t.id),
+               (SELECT SUM(e.amount) FROM LedgerEntry e WHERE e.ledgerTransaction.id = t.id)
+        FROM LedgerTransaction t
+        WHERE (t.status = com.aetherledger.domain.enums.TransactionStatus.SUCCESS
+               AND (SELECT COUNT(e) FROM LedgerEntry e WHERE e.ledgerTransaction.id = t.id) <> 2)
+           OR (t.status = com.aetherledger.domain.enums.TransactionStatus.SUCCESS
+               AND (SELECT SUM(e.amount) FROM LedgerEntry e WHERE e.ledgerTransaction.id = t.id)
+                     IS NOT NULL
+               AND (SELECT SUM(e.amount) FROM LedgerEntry e WHERE e.ledgerTransaction.id = t.id) <> 0)
+           OR ((t.status = com.aetherledger.domain.enums.TransactionStatus.PENDING
+                OR t.status = com.aetherledger.domain.enums.TransactionStatus.FAILED)
+               AND (SELECT COUNT(e) FROM LedgerEntry e WHERE e.ledgerTransaction.id = t.id) > 0)
+        ORDER BY t.createdAt DESC
+        """)
+    List<Object[]> findIntegrityIssues();
 }

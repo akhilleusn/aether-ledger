@@ -5,8 +5,11 @@ import com.aetherledger.api.dto.BatchReconcileItemResult;
 import com.aetherledger.api.dto.BatchReconcileResponse;
 import com.aetherledger.api.dto.ReconciliationSummaryResponse;
 import com.aetherledger.domain.entity.LedgerTransaction;
+import com.aetherledger.domain.entity.ReconciliationRun;
 import com.aetherledger.domain.enums.ReconciliationResult;
+import com.aetherledger.exception.ReconciliationRunNotFoundException;
 import com.aetherledger.repository.LedgerTransactionRepository;
+import com.aetherledger.repository.ReconciliationRunRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Orchestrates reconciliation operations against the ledger.
@@ -36,6 +40,7 @@ import java.util.Optional;
 public class ReconciliationService {
 
     private final LedgerTransactionRepository ledgerTransactionRepository;
+    private final ReconciliationRunRepository reconciliationRunRepository;
 
     @Transactional(rollbackFor = Exception.class)
     public BatchReconcileResponse batchReconcile(List<BatchReconcileItem> items) {
@@ -75,9 +80,25 @@ public class ReconciliationService {
                 + "missingTransaction={} missingExternalRef={}",
             items.size(), updatedCount, matchedCount, mismatchCount, missingCount, missingRefCount);
 
+        ReconciliationRun run = ReconciliationRun.create(
+            items.size(), updatedCount, matchedCount, mismatchCount, missingCount, missingRefCount);
+
+        for (BatchReconcileItemResult r : results) {
+            run.addItem(r.referenceId(), r.transactionId(), r.reconciliationResult(), r.status());
+        }
+
+        ReconciliationRun saved = reconciliationRunRepository.save(run);
+
         return new BatchReconcileResponse(
+            saved.getId(),
             items.size(), updatedCount, matchedCount, mismatchCount,
             missingCount, missingRefCount, results);
+    }
+
+    @Transactional(readOnly = true)
+    public ReconciliationRun getRunById(UUID runId) {
+        return reconciliationRunRepository.findByIdWithItems(runId)
+            .orElseThrow(() -> new ReconciliationRunNotFoundException(runId));
     }
 
     @Transactional(readOnly = true)

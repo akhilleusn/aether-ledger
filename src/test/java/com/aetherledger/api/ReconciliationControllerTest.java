@@ -5,6 +5,8 @@ import com.aetherledger.domain.enums.AccountType;
 import com.aetherledger.repository.AccountRepository;
 import com.aetherledger.repository.LedgerEntryRepository;
 import com.aetherledger.repository.LedgerTransactionRepository;
+import com.aetherledger.repository.ReconciliationRunItemRepository;
+import com.aetherledger.repository.ReconciliationRunRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,12 +46,16 @@ class ReconciliationControllerTest {
     @Autowired AccountRepository accountRepository;
     @Autowired LedgerTransactionRepository ledgerTransactionRepository;
     @Autowired LedgerEntryRepository ledgerEntryRepository;
+    @Autowired ReconciliationRunItemRepository reconciliationRunItemRepository;
+    @Autowired ReconciliationRunRepository reconciliationRunRepository;
 
     private Account debitAccount;
     private Account creditAccount;
 
     @BeforeEach
     void setUp() {
+        reconciliationRunItemRepository.deleteAllInBatch();
+        reconciliationRunRepository.deleteAllInBatch();
         ledgerEntryRepository.deleteAllInBatch();
         ledgerTransactionRepository.deleteAllInBatch();
         accountRepository.deleteAllInBatch();
@@ -267,6 +273,108 @@ class ReconciliationControllerTest {
                 .andExpect(jsonPath("$.mismatchCount").value(0))
                 .andExpect(jsonPath("$.notReconciledCount").value(0))
                 .andExpect(jsonPath("$.missingExternalReferenceCount").value(0));
+        }
+    }
+
+    // =========================================================================
+    // GET /api/v1/reconciliation/runs/{id}
+    // =========================================================================
+
+    @Nested
+    @DisplayName("GET /api/v1/reconciliation/runs/{id}")
+    class BatchRunAudit {
+
+        @Test
+        @DisplayName("batch response includes runId that is a valid UUID")
+        void batchResponse_includesRunId() throws Exception {
+            postTransaction("REF-RUN-A");
+
+            var result = mockMvc.perform(post(BATCH_ENDPOINT)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(toJson(batchRequest(List.of(
+                        batchItem("REF-RUN-A", "EXT-RA", "SUCCESS")
+                    )))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.runId").isNotEmpty())
+                .andReturn();
+
+            String runId = objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("runId").asText();
+
+            // runId should be parseable as UUID without throwing
+            java.util.UUID.fromString(runId);
+        }
+
+        @Test
+        @DisplayName("get run by id returns full audit details with all item outcomes")
+        void getRunById_returnsAuditDetails() throws Exception {
+            postTransaction("REF-RUN-B");
+            postTransaction("REF-RUN-C");
+
+            var batchResult = mockMvc.perform(post(BATCH_ENDPOINT)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(toJson(batchRequest(List.of(
+                        batchItem("REF-RUN-B",     "EXT-RB", "SUCCESS"),
+                        batchItem("REF-RUN-C",     "EXT-RC", "FAILED"),   // mismatch
+                        batchItem("REF-RUN-GHOST", "EXT-RX", "SUCCESS")   // not found
+                    )))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+            String runId = objectMapper.readTree(batchResult.getResponse().getContentAsString())
+                .get("runId").asText();
+
+            mockMvc.perform(get("/api/v1/reconciliation/runs/{id}", runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.runId").value(runId))
+                .andExpect(jsonPath("$.createdAt").isNotEmpty())
+                .andExpect(jsonPath("$.totalItems").value(3))
+                .andExpect(jsonPath("$.updatedCount").value(2))
+                .andExpect(jsonPath("$.matchedCount").value(1))
+                .andExpect(jsonPath("$.mismatchCount").value(1))
+                .andExpect(jsonPath("$.missingTransactionCount").value(1))
+                .andExpect(jsonPath("$.results", hasSize(3)));
+        }
+
+        @Test
+        @DisplayName("missing run id returns 404 RECONCILIATION_RUN_NOT_FOUND")
+        void getRunById_unknownId_returns404() throws Exception {
+            mockMvc.perform(get("/api/v1/reconciliation/runs/{id}",
+                        "00000000-0000-0000-0000-000000000000"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("RECONCILIATION_RUN_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("run record totals match actual item breakdown after mixed batch")
+        void getRunById_mixedBatch_totalsAreConsistent() throws Exception {
+            postTransaction("REF-RUN-D");
+            postTransaction("REF-RUN-E");
+            postTransaction("REF-RUN-F");
+
+            var batchResult = mockMvc.perform(post(BATCH_ENDPOINT)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(toJson(batchRequest(List.of(
+                        batchItem("REF-RUN-D",     "EXT-RD", "SUCCESS"),  // matched
+                        batchItem("REF-RUN-E",     "EXT-RE", "FAILED"),   // mismatch
+                        batchItem("REF-RUN-F",     null,     "SUCCESS"),  // missing external ref
+                        batchItem("REF-RUN-GHOST2","EXT-RG", "SUCCESS")   // not found
+                    )))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+            String runId = objectMapper.readTree(batchResult.getResponse().getContentAsString())
+                .get("runId").asText();
+
+            mockMvc.perform(get("/api/v1/reconciliation/runs/{id}", runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItems").value(4))
+                .andExpect(jsonPath("$.updatedCount").value(3))
+                .andExpect(jsonPath("$.matchedCount").value(1))
+                .andExpect(jsonPath("$.mismatchCount").value(1))
+                .andExpect(jsonPath("$.missingExternalReferenceCount").value(1))
+                .andExpect(jsonPath("$.missingTransactionCount").value(1))
+                .andExpect(jsonPath("$.results", hasSize(4)));
         }
     }
 

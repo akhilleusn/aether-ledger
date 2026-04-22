@@ -9,6 +9,7 @@ import com.aetherledger.exception.LedgerTransactionNotFoundException;
 import com.aetherledger.exception.TransactionAlreadyReversedException;
 import com.aetherledger.exception.TransactionNotCompletableException;
 import com.aetherledger.exception.TransactionNotFailableException;
+import com.aetherledger.exception.ReconciliationRunNotFoundException;
 import com.aetherledger.exception.TransactionNotReversibleException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -172,6 +173,16 @@ public class GlobalExceptionHandler {
 
         log.warn("Transaction not reversible on {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.UNPROCESSABLE_ENTITY, "TRANSACTION_NOT_REVERSIBLE", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(ReconciliationRunNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleReconciliationRunNotFound(
+            ReconciliationRunNotFoundException ex,
+            HttpServletRequest request) {
+
+        log.warn("Reconciliation run not found on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.NOT_FOUND, "RECONCILIATION_RUN_NOT_FOUND", ex.getMessage(), request);
     }
 
     @ExceptionHandler(DuplicateReferenceIdException.class)

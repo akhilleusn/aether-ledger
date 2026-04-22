@@ -2,12 +2,15 @@ package com.aetherledger.api;
 
 import com.aetherledger.api.dto.BatchReconcileRequest;
 import com.aetherledger.api.dto.BatchReconcileResponse;
+import com.aetherledger.api.dto.ReconciliationRunResponse;
 import com.aetherledger.api.dto.ReconciliationSummaryResponse;
 import com.aetherledger.service.ReconciliationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 /**
  * REST controller for batch reconciliation operations.
@@ -33,5 +36,10 @@ public class ReconciliationController {
     @GetMapping("/summary")
     public ReconciliationSummaryResponse summary() {
         return reconciliationService.getSummary();
+    }
+
+    @GetMapping("/runs/{id}")
+    public ReconciliationRunResponse getRunById(@PathVariable UUID id) {
+        return ReconciliationRunResponse.from(reconciliationService.getRunById(id));
     }
 }

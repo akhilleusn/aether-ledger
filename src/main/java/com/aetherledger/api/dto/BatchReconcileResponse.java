@@ -1,6 +1,7 @@
 package com.aetherledger.api.dto;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Summary result returned by {@code POST /api/v1/reconciliation/batch}.
@@ -9,6 +10,7 @@ import java.util.List;
  * Among updated items: {@code matchedCount + mismatchCount + missingExternalReferenceCount == updatedCount}.
  */
 public record BatchReconcileResponse(
+    UUID runId,
     int totalItems,
     int updatedCount,
     int matchedCount,
