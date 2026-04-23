@@ -3,40 +3,38 @@ package com.aetherledger.api;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Base class for all Spring Boot integration tests.
  *
- * <p>Starts a single PostgreSQL container for the entire test run and registers
- * its connection details as dynamic Spring properties before any application
- * context is created.  Flyway then applies the real migration scripts against
- * this container, so tests execute against a schema that is byte-for-byte
- * identical to production.
+ * <p>Starts a single PostgreSQL container for the entire JVM invocation via a static
+ * initializer, so it stays alive across all test classes.  Testcontainers registers
+ * its own JVM shutdown hook to stop the container when the process exits.
  *
- * <p><strong>Container lifecycle</strong><br>
- * The container field is {@code static} and annotated with {@link Container},
- * so Testcontainers starts it once per JVM invocation and keeps it running
- * until the process exits.  Spring Boot's context-caching mechanism reuses
- * the same application context across all subclasses because they all receive
- * the same dynamic property values from the same container instance, making
- * the full test suite fast without sacrificing isolation between test methods.
+ * <p>Using {@code @Testcontainers} + {@code @Container} would stop the container after
+ * each top-level test class, causing connection failures for the next class.  The static
+ * initializer approach is the correct pattern for sharing a container across multiple
+ * test classes in a single test run.
+ *
+ * <p>Spring Boot's context-caching mechanism reuses the same application context across
+ * all subclasses because they all receive the same dynamic property values from the
+ * same container instance, making the full suite fast without sacrificing isolation.
  *
  * <p><strong>Test isolation</strong><br>
  * Each test class is responsible for cleaning up data in its {@code @BeforeEach}
- * method in foreign-key-safe order.  The container schema is never dropped
- * or recreated between test classes within a single run.
+ * method in foreign-key-safe order.
  */
-@Testcontainers
 abstract class AbstractIntegrationTest {
 
-    @Container
-    static final PostgreSQLContainer<?> postgres =
-            new PostgreSQLContainer<>("postgres:16-alpine")
-                    .withDatabaseName("aetherledger_test")
-                    .withUsername("tc")
-                    .withPassword("tc");
+    static final PostgreSQLContainer<?> postgres;
+
+    static {
+        postgres = new PostgreSQLContainer<>("postgres:16-alpine")
+                .withDatabaseName("aetherledger_test")
+                .withUsername("tc")
+                .withPassword("tc");
+        postgres.start();
+    }
 
     @DynamicPropertySource
     static void configureDataSource(DynamicPropertyRegistry registry) {
