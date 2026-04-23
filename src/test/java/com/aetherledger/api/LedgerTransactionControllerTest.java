@@ -32,17 +32,18 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * Full-stack integration tests for POST /api/v1/ledger-transactions.
+ * Full-stack integration tests for the ledger-transactions API.
  *
- * <p>Runs against an H2 in-memory database (profile "test") with the real
- * service, repository, and JPA layers.  Each test starts with a clean slate
- * by wiping all tables in foreign-key-safe order inside {@code setUp()}.
+ * <p>Runs against a real PostgreSQL instance managed by Testcontainers.
+ * Flyway applies the production migration scripts before the first test,
+ * and each test method starts with a clean slate by wiping all tables in
+ * foreign-key-safe order inside {@code setUp()}.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @DisplayName("LedgerTransactionController")
-class LedgerTransactionControllerTest {
+class LedgerTransactionControllerTest extends AbstractIntegrationTest {
 
     private static final String ENDPOINT = "/api/v1/ledger-transactions";
 

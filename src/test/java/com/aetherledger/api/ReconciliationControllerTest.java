@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @DisplayName("ReconciliationController")
-class ReconciliationControllerTest {
+class ReconciliationControllerTest extends AbstractIntegrationTest {
 
     private static final String BATCH_ENDPOINT   = "/api/v1/reconciliation/batch";
     private static final String SUMMARY_ENDPOINT = "/api/v1/reconciliation/summary";

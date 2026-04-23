@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @DisplayName("OpsController")
-class OpsControllerTest {
+class OpsControllerTest extends AbstractIntegrationTest {
 
     private static final String LEDGER_REPORT_ENDPOINT  = "/api/v1/ops/integrity/ledger";
     private static final String LEDGER_ISSUES_ENDPOINT  = "/api/v1/ops/integrity/ledger/issues";

@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @DisplayName("AccountController")
-class AccountControllerTest {
+class AccountControllerTest extends AbstractIntegrationTest {
 
     private static final String ENDPOINT = "/api/v1/accounts";
 
