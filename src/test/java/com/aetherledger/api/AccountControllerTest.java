@@ -236,6 +236,15 @@ class AccountControllerTest extends AbstractIntegrationTest {
         }
 
         @Test
+        @DisplayName("returns 400 with INVALID_PATH_VARIABLE for non-UUID id")
+        void getById_invalidUuid_returns400() throws Exception {
+            mockMvc.perform(get(ENDPOINT + "/not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_PATH_VARIABLE"))
+                .andExpect(jsonPath("$.message").value("Request path contains an invalid value."));
+        }
+
+        @Test
         @DisplayName("balance reflects posted ledger transactions")
         void getById_afterTransaction_balanceIsCorrect() throws Exception {
             Account payer    = accountRepository.save(Account.of("Payer",    AccountType.USER));
@@ -366,6 +375,15 @@ class AccountControllerTest extends AbstractIntegrationTest {
             mockMvc.perform(get(ENDPOINT + "/{id}/entries", UUID.randomUUID()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("ACCOUNT_NOT_FOUND"));
+        }
+
+        @Test
+        @DisplayName("returns 400 with INVALID_PATH_VARIABLE for non-UUID account id")
+        void getLedgerHistory_invalidUuid_returns400() throws Exception {
+            mockMvc.perform(get(ENDPOINT + "/not-a-uuid/entries"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_PATH_VARIABLE"))
+                .andExpect(jsonPath("$.message").value("Request path contains an invalid value."));
         }
 
         @Test

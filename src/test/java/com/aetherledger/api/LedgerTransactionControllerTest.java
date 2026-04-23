@@ -505,6 +505,15 @@ class LedgerTransactionControllerTest extends AbstractIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("TRANSACTION_NOT_FOUND"));
         }
+
+        @Test
+        @DisplayName("non-UUID id returns 400 with INVALID_PATH_VARIABLE")
+        void getById_invalidUuid_returns400() throws Exception {
+            mockMvc.perform(get(ENDPOINT + "/not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_PATH_VARIABLE"))
+                .andExpect(jsonPath("$.message").value("Request path contains an invalid value."));
+        }
     }
 
     // =========================================================================

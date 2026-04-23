@@ -22,6 +22,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
 import java.util.stream.Collectors;
@@ -34,6 +35,7 @@ import java.util.stream.Collectors;
  * <pre>
  *   InvalidTransactionRequestException    →  400 BAD_REQUEST          INVALID_REQUEST
  *   MethodArgumentNotValidException       →  400 BAD_REQUEST          VALIDATION_FAILED
+ *   MethodArgumentTypeMismatchException   →  400 BAD_REQUEST          INVALID_PATH_VARIABLE
  *   AccountNotFoundException              →  404 NOT_FOUND            ACCOUNT_NOT_FOUND
  *   DuplicateReferenceIdException         →  409 CONFLICT             DUPLICATE_REFERENCE_ID
  *   HttpRequestMethodNotSupportedException→  405 METHOD_NOT_ALLOWED   METHOD_NOT_ALLOWED
@@ -208,6 +210,17 @@ public class GlobalExceptionHandler {
             "Request method is not supported for this endpoint.",
             request
         );
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex,
+            HttpServletRequest request) {
+
+        log.warn("Path variable type mismatch on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.BAD_REQUEST, "INVALID_PATH_VARIABLE",
+            "Request path contains an invalid value.", request);
     }
 
     @ExceptionHandler(Exception.class)

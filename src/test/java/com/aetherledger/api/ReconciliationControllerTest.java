@@ -346,6 +346,15 @@ class ReconciliationControllerTest extends AbstractIntegrationTest {
         }
 
         @Test
+        @DisplayName("non-UUID run id returns 400 with INVALID_PATH_VARIABLE")
+        void getRunById_invalidUuid_returns400() throws Exception {
+            mockMvc.perform(get("/api/v1/reconciliation/runs/not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_PATH_VARIABLE"))
+                .andExpect(jsonPath("$.message").value("Request path contains an invalid value."));
+        }
+
+        @Test
         @DisplayName("run record totals match actual item breakdown after mixed batch")
         void getRunById_mixedBatch_totalsAreConsistent() throws Exception {
             postTransaction("REF-RUN-D");
