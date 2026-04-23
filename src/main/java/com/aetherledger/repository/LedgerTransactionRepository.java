@@ -37,6 +37,23 @@ public interface LedgerTransactionRepository extends JpaRepository<LedgerTransac
     Optional<LedgerTransaction> findByIdWithLock(@Param("id") UUID id);
 
     /**
+     * Returns SUCCESS transactions that have not yet been reconciled and are
+     * not currently held by another scheduler instance.
+     *
+     * <p>Ordered oldest-first so the job works through the backlog in
+     * chronological order.  Capped at 500 to bound each run's work unit.
+     */
+    @Query("""
+        SELECT t FROM LedgerTransaction t
+        WHERE t.status = com.aetherledger.domain.enums.TransactionStatus.SUCCESS
+          AND t.reconciledAt IS NULL
+          AND t.processing = false
+        ORDER BY t.createdAt ASC
+        LIMIT 500
+        """)
+    List<LedgerTransaction> findUnreconciled();
+
+    /**
      * Fetches a transaction with its two entries and each entry's account in
      * a single query, avoiding N+1 round-trips when the caller needs the full
      * audit detail (entry amounts, account names).

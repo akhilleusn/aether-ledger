@@ -122,6 +122,15 @@ public class LedgerTransaction {
     private UUID reversedByTransactionId;
 
     /**
+     * Set to {@code true} by the scheduled reconciliation job when it claims this
+     * transaction for processing.  Cleared on successful commit.  Combined with the
+     * {@code @Version} column, acts as an optimistic-lock guard against duplicate
+     * processing across concurrent scheduler instances.
+     */
+    @Column(name = "processing", nullable = false)
+    private boolean processing = false;
+
+    /**
      * Entries are managed by the {@link LedgerEntry} side of the relationship.
      * {@code CascadeType.REMOVE} is intentionally omitted — ledger entries are
      * permanent financial records and must never be deleted.
@@ -203,6 +212,16 @@ public class LedgerTransaction {
     public void markAsFailed() {
         requirePending("FAILED");
         this.status = TransactionStatus.FAILED;
+    }
+
+    /** Claims this transaction for scheduled reconciliation processing. */
+    public void markProcessing() {
+        this.processing = true;
+    }
+
+    /** Releases the processing claim after successful reconciliation. */
+    public void unmarkProcessing() {
+        this.processing = false;
     }
 
     // -------------------------------------------------------------------------
@@ -290,6 +309,7 @@ public class LedgerTransaction {
     public String getExternalReferenceId()      { return externalReferenceId; }
     public ExternalStatus getExternalStatus()   { return externalStatus; }
     public Instant getReconciledAt()            { return reconciledAt; }
+    public boolean isProcessing()               { return processing; }
 
     /** Returns an unmodifiable view; entries are added through {@link LedgerEntry}'s factory. */
     public List<LedgerEntry> getLedgerEntries() {
