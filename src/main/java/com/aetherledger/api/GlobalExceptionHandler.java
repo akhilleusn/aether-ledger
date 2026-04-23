@@ -11,11 +11,13 @@ import com.aetherledger.exception.TransactionNotCompletableException;
 import com.aetherledger.exception.TransactionNotFailableException;
 import com.aetherledger.exception.ReconciliationRunNotFoundException;
 import com.aetherledger.exception.TransactionNotReversibleException;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -33,13 +35,15 @@ import java.util.stream.Collectors;
  *
  * <p>Mapping table:
  * <pre>
- *   InvalidTransactionRequestException    →  400 BAD_REQUEST          INVALID_REQUEST
- *   MethodArgumentNotValidException       →  400 BAD_REQUEST          VALIDATION_FAILED
- *   MethodArgumentTypeMismatchException   →  400 BAD_REQUEST          INVALID_PATH_VARIABLE
- *   AccountNotFoundException              →  404 NOT_FOUND            ACCOUNT_NOT_FOUND
- *   DuplicateReferenceIdException         →  409 CONFLICT             DUPLICATE_REFERENCE_ID
- *   HttpRequestMethodNotSupportedException→  405 METHOD_NOT_ALLOWED   METHOD_NOT_ALLOWED
- *   Exception (catch-all)                →  500 INTERNAL_SERVER_ERROR INTERNAL_ERROR
+ *   InvalidTransactionRequestException      →  400 BAD_REQUEST          INVALID_REQUEST
+ *   MethodArgumentNotValidException         →  400 BAD_REQUEST          VALIDATION_FAILED
+ *   MethodArgumentTypeMismatchException     →  400 BAD_REQUEST          INVALID_PATH_VARIABLE
+ *   AccountNotFoundException                →  404 NOT_FOUND            ACCOUNT_NOT_FOUND
+ *   DuplicateReferenceIdException           →  409 CONFLICT             DUPLICATE_REFERENCE_ID
+ *   ObjectOptimisticLockingFailureException →  409 CONFLICT             CONCURRENT_MODIFICATION
+ *   OptimisticLockException                 →  409 CONFLICT             CONCURRENT_MODIFICATION
+ *   HttpRequestMethodNotSupportedException  →  405 METHOD_NOT_ALLOWED   METHOD_NOT_ALLOWED
+ *   Exception (catch-all)                   →  500 INTERNAL_SERVER_ERROR INTERNAL_ERROR
  * </pre>
  *
  * <p>The catch-all handler deliberately suppresses the internal exception
@@ -221,6 +225,29 @@ public class GlobalExceptionHandler {
         log.warn("Path variable type mismatch on {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.BAD_REQUEST, "INVALID_PATH_VARIABLE",
             "Request path contains an invalid value.", request);
+    }
+
+    /**
+     * Fired when two concurrent requests both read the same entity version and
+     * the second writer's UPDATE matches zero rows (stale version).  Spring
+     * translates the underlying {@link OptimisticLockException} from the JPA
+     * provider to {@link ObjectOptimisticLockingFailureException} at the
+     * repository boundary; we handle both to cover all propagation paths.
+     *
+     * <p>Callers should retry the operation after a short back-off.
+     */
+    @ExceptionHandler({
+        ObjectOptimisticLockingFailureException.class,
+        OptimisticLockException.class
+    })
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleConcurrentModification(
+            Exception ex,
+            HttpServletRequest request) {
+
+        log.warn("Optimistic lock conflict on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION",
+            "The resource was modified concurrently. Please retry.", request);
     }
 
     @ExceptionHandler(Exception.class)
