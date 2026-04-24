@@ -130,57 +130,52 @@ Account rows are locked with `SELECT ... FOR UPDATE` before any balance-affectin
 | Schema management | Flyway |
 | API documentation | springdoc-openapi 2.5.0 (Swagger UI) |
 | Build tool | Maven |
+| Containerisation | Docker + Docker Compose |
 | Test database | Testcontainers (PostgreSQL 16-alpine) |
 | Locking | Pessimistic write locks (JPA `PESSIMISTIC_WRITE`) |
 | Concurrency safety | `@Version` optimistic locking on `LedgerTransaction` |
+| CI | GitHub Actions |
 
 ---
 
 ## Running locally
 
-### Prerequisites
+### Option A — Docker Compose (recommended)
 
-- Java 17+
-- Maven 3.8+
-- PostgreSQL 16 (local instance or Docker)
-
-### 1. Start PostgreSQL
+Requires Docker Desktop or any Docker Engine with Compose v2.
 
 ```bash
-docker run -d \
-  --name aetherledger-pg \
-  -e POSTGRES_DB=aetherledger \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -p 5432:5432 \
-  postgres:16-alpine
+# Optional: set credentials (defaults to postgres/postgres)
+cp .env.example .env
+# edit .env with your preferred DB_USERNAME and DB_PASSWORD
+
+docker compose up --build
 ```
 
-### 2. Configure the datasource
+Flyway runs automatically on startup. The application is available at `http://localhost:8080`.
 
-Edit `src/main/resources/application.properties`:
+**Swagger UI:** `http://localhost:8080/swagger-ui.html`
 
-```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/aetherledger
-spring.datasource.username=postgres
-spring.datasource.password=postgres
+To stop and remove volumes:
+```bash
+docker compose down -v
 ```
 
-### 3. Run the application
+---
+
+### Option B — Maven + local PostgreSQL
+
+**Prerequisites:** Java 17+, Maven 3.8+, PostgreSQL 16
 
 ```bash
+export DB_URL=jdbc:postgresql://localhost:5432/aetherledger
+export DB_USERNAME=postgres
+export DB_PASSWORD=yourpassword
+
 mvn spring-boot:run
 ```
 
-Flyway applies `V1__baseline_schema.sql` automatically on first boot. The application starts on port `8080`.
-
-### 4. Open Swagger UI
-
-```
-http://localhost:8080/swagger-ui.html
-```
-
-The full interactive API reference is available there, with request/response schemas, example values, and a "Try it out" interface for every endpoint.
+Flyway applies all migrations automatically on first boot.
 
 ---
 
@@ -192,7 +187,7 @@ The test suite uses **Testcontainers** to run all integration tests against a re
 mvn test
 ```
 
-All 121 tests are full integration tests — no mocks, no H2, no in-memory substitutes. Flyway applies the real migration script against the container before any test runs, so the schema is byte-for-byte identical to production.
+All 156 tests are full integration tests — no mocks, no H2, no in-memory substitutes. Flyway applies every migration against the container before any test run, so the schema is byte-for-byte identical to production.
 
 **Test isolation:** each test class cleans up its own data in `@BeforeEach` in foreign-key-safe order. A single PostgreSQL container is shared across all test classes within a run, and Spring's context cache reuses one application context, keeping the suite fast.
 
@@ -331,41 +326,56 @@ src/main/java/com/aetherledger/
 │   ├── ReconciliationController
 │   ├── OpsController             # Integrity and health endpoints
 │   ├── GlobalExceptionHandler    # Unified error mapping
-│   └── dto/                      # 22 request/response record types
+│   └── dto/                      # Request/response record types
 │
 ├── config/
 │   └── OpenApiConfig             # API title, description, contact
 │
 ├── domain/
-│   ├── entity/                   # 5 JPA entities
+│   ├── entity/                   # JPA entities
 │   │   ├── Account
 │   │   ├── LedgerTransaction
 │   │   ├── LedgerEntry
 │   │   ├── ReconciliationRun
-│   │   └── ReconciliationRunItem
+│   │   ├── ReconciliationRunItem
+│   │   └── OutboxEvent           # Transactional outbox record
 │   └── enums/                    # AccountType, TransactionStatus,
-│                                 # ExternalStatus, ReconciliationResult
+│                                 # ExternalStatus, ReconciliationResult,
+│                                 # OutboxEventType
 │
-├── exception/                    # 10 typed domain exceptions
-│                                 # all extend LedgerException
+├── exception/                    # Typed domain exceptions
+│                                 # (all extend LedgerException)
 │
-├── repository/                   # 5 Spring Data repositories
-│                                 # with custom JPQL for joins, counts,
-│                                 # aggregates, and pessimistic locks
+├── repository/                   # Spring Data repositories with custom
+│                                 # JPQL, pessimistic locks, and aggregates
 │
 └── service/                      # Business logic
     ├── AccountService
     ├── LedgerTransactionService  # Core transaction orchestration
     ├── ReconciliationService     # Batch reconciliation + audit
+    ├── ScheduledReconciliationService  # Cron-driven auto-reconciliation
     ├── OpsService                # Integrity aggregates
+    ├── OutboxService             # Writes outbox rows inside transactions
+    ├── OutboxEventPublisher      # Port interface for broker delivery
+    ├── LoggingOutboxEventPublisher  # Simulated adapter (swap for Kafka)
+    ├── OutboxRelayService        # Relay loop — fetch → publish → mark
+    ├── OutboxRelayProcessor      # Per-event REQUIRES_NEW transaction
+    ├── OutboxRelayJob            # @Scheduled relay trigger
     └── command/                  # PostTransactionCommand
                                   # ReverseTransactionCommand
 
 src/main/resources/
 ├── application.properties
 └── db/migration/
-    └── V1__baseline_schema.sql   # Full PostgreSQL schema — 5 tables,
-                                  # indexes, CHECK constraints, FKs
+    ├── V1__baseline_schema.sql   # Accounts, transactions, entries, FKs
+    ├── V2__reconciliation.sql    # Reconciliation run tables
+    ├── V3__create_outbox_events.sql  # Outbox table + partial index
+    └── V4__add_outbox_published_at.sql  # published_at column
+
+.github/workflows/
+└── ci.yml                        # GitHub Actions: test on every push
+Dockerfile                        # Multi-stage build (Maven → JRE)
+docker-compose.yml                # postgres + app, healthcheck, volumes
 ```
 
 ---
@@ -374,8 +384,6 @@ src/main/resources/
 
 - **Authentication and authorization** — JWT-based auth with per-account access control
 - **Multi-currency support** — ISO 4217 currency codes on transactions and entries, FX rate ledger
-- **Event publishing** — outbox pattern for publishing `TransactionSettled` and `ReconciliationCompleted` domain events to Kafka or SNS
-- **Scheduled reconciliation** — cron-driven automatic batch reconciliation against registered provider adapters
 - **Cursor-based pagination** — replace offset pagination with keyset pagination for large ledgers
 - **Read replica routing** — route `@Transactional(readOnly = true)` queries to a read replica
 - **Metrics and alerting** — Micrometer + Prometheus gauges for zero-sum violation count, pending transaction backlog, and reconciliation match rate
