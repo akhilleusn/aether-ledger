@@ -1,10 +1,15 @@
 package com.aetherledger.repository;
 
 import com.aetherledger.domain.entity.OutboxEvent;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -27,4 +32,13 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
 
     /** Count of events pending delivery — useful for monitoring and alerting. */
     long countByPublishedFalse();
+
+    /**
+     * Fetches a single event with a pessimistic write lock.
+     * Used by the relay processor to prevent two concurrent relay instances
+     * from publishing the same event twice.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT e FROM OutboxEvent e WHERE e.id = :id")
+    Optional<OutboxEvent> findByIdWithLock(@Param("id") UUID id);
 }

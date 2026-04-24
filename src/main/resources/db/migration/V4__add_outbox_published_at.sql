@@ -1,0 +1,12 @@
+-- ---------------------------------------------------------------------------
+-- V4: Add published_at column to outbox_events
+--
+-- Records the wall-clock instant at which the relay successfully delivered an
+-- event to an external broker.  NULL for all rows that have not yet been
+-- published.
+--
+-- The column is nullable because existing rows (published = false) have no
+-- delivery timestamp, and requiring NOT NULL would break the migration on a
+-- live table.
+-- ---------------------------------------------------------------------------
+ALTER TABLE outbox_events ADD COLUMN published_at TIMESTAMPTZ;

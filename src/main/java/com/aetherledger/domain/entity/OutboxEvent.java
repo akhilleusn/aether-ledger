@@ -50,10 +50,15 @@ public class OutboxEvent {
 
     /**
      * {@code false} until a relay successfully delivers this event to a broker.
-     * This is the only field that may be updated after initial creation.
+     * This field and {@link #publishedAt} are the only fields that may be updated
+     * after initial creation.
      */
     @Column(name = "published", nullable = false)
     private boolean published = false;
+
+    /** Set by the relay when the event is delivered; {@code null} until then. */
+    @Column(name = "published_at")
+    private Instant publishedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -88,7 +93,8 @@ public class OutboxEvent {
 
     /** Marks this event as delivered; called by the relay after successful publish. */
     public void markPublished() {
-        this.published = true;
+        this.published    = true;
+        this.publishedAt  = Instant.now();
     }
 
     // -------------------------------------------------------------------------
@@ -101,6 +107,7 @@ public class OutboxEvent {
     public String  getAggregateType() { return aggregateType; }
     public String  getPayload()       { return payload; }
     public boolean isPublished()      { return published; }
+    public Instant getPublishedAt()   { return publishedAt; }
     public Instant getCreatedAt()     { return createdAt; }
 
     @Override
