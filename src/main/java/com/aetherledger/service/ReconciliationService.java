@@ -41,6 +41,7 @@ public class ReconciliationService {
 
     private final LedgerTransactionRepository ledgerTransactionRepository;
     private final ReconciliationRunRepository reconciliationRunRepository;
+    private final OutboxService outboxService;
 
     @Transactional(rollbackFor = Exception.class)
     public BatchReconcileResponse batchReconcile(List<BatchReconcileItem> items) {
@@ -67,6 +68,8 @@ public class ReconciliationService {
             ReconciliationResult result = tx.computeReconciliationResult();
             results.add(BatchReconcileItemResult.updated(item.referenceId(), tx.getId(), result));
 
+            outboxService.publishTransactionReconciled(tx);
+
             updatedCount++;
             switch (result) {
                 case MATCHED                    -> matchedCount++;
@@ -88,6 +91,8 @@ public class ReconciliationService {
         }
 
         ReconciliationRun saved = reconciliationRunRepository.save(run);
+
+        outboxService.publishBatchReconciliationCompleted(saved);
 
         return new BatchReconcileResponse(
             saved.getId(),

@@ -64,6 +64,7 @@ public class LedgerTransactionService {
     private final AccountRepository accountRepository;
     private final LedgerTransactionRepository ledgerTransactionRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
+    private final OutboxService outboxService;
 
     /**
      * Posts a double-entry ledger transaction atomically.
@@ -124,6 +125,9 @@ public class LedgerTransactionService {
             command.creditAccountId(),
             command.amount()
         );
+
+        outboxService.publishTransactionPosted(
+            ledgerTx, command.debitAccountId(), command.creditAccountId(), command.amount());
 
         return ledgerTx;
     }
@@ -205,6 +209,8 @@ public class LedgerTransactionService {
 
         log.info("Pending transaction completed: id={} referenceId='{}' amount={}",
             tx.getId(), tx.getReferenceId(), tx.getAmount());
+
+        outboxService.publishTransactionCompleted(tx);
 
         return tx;
     }
@@ -325,6 +331,8 @@ public class LedgerTransactionService {
         log.info("Transaction reversed: originalId={} reversalId={} reversalReferenceId='{}'",
             original.getId(), reversal.getId(), reversal.getReferenceId());
 
+        outboxService.publishTransactionReversed(reversal);
+
         return reversal;
     }
 
@@ -355,6 +363,8 @@ public class LedgerTransactionService {
         log.info("Transaction reconciled: id={} externalReferenceId='{}' externalStatus={} result={}",
             tx.getId(), tx.getExternalReferenceId(), tx.getExternalStatus(),
             tx.computeReconciliationResult());
+
+        outboxService.publishTransactionReconciled(tx);
 
         return tx;
     }
