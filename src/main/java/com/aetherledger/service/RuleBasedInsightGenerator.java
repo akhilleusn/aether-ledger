@@ -23,9 +23,21 @@ import java.util.Map;
  *   <li>Recommends checks — never prescribes a mandatory fix.</li>
  *   <li>Avoids medical, legal, or financial advice wording.</li>
  * </ul>
+ *
+ * <p>Risk levels:
+ * <ul>
+ *   <li>{@code LOW}    — MATCHED; no action required.</li>
+ *   <li>{@code MEDIUM} — NOT_RECONCILED or MISSING_EXTERNAL_REFERENCE; data incomplete.</li>
+ *   <li>{@code HIGH}   — STATUS_MISMATCH; statuses disagree, investigation needed.</li>
+ * </ul>
  */
 @Component
 public class RuleBasedInsightGenerator implements InsightGenerator {
+
+    private static final String SOURCE       = "RULE_BASED";
+    private static final String RISK_LOW     = "LOW";
+    private static final String RISK_MEDIUM  = "MEDIUM";
+    private static final String RISK_HIGH    = "HIGH";
 
     private static final Map<String, Insight> MISMATCH_TABLE = buildMismatchTable();
 
@@ -44,7 +56,7 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
     // -------------------------------------------------------------------------
 
     private static Insight notReconciled() {
-        return new Insight(
+        return rb(
             "No external reconciliation data has been recorded for this transaction. " +
             "The provider has not been queried yet, or the scheduled reconciliation job has not " +
             "processed this transaction.",
@@ -52,26 +64,29 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
                 "Verify the reconciliation batch covers this transaction's date range.",
                 "Confirm the scheduled reconciliation job is enabled and running.",
                 "Check whether the transaction's referenceId was submitted to the external provider."
-            )
+            ),
+            RISK_MEDIUM
         );
     }
 
     private static Insight matched() {
-        return new Insight(
+        return rb(
             "Internal and external statuses are in agreement. No anomaly detected.",
-            List.of("No action required.")
+            List.of("No action required."),
+            RISK_LOW
         );
     }
 
     private static Insight missingExternalReference() {
-        return new Insight(
+        return rb(
             "A reconciliation attempt was recorded but the external provider reference ID or status " +
             "was not supplied. The outcome cannot be fully verified without complete external data.",
             List.of(
                 "Re-submit reconciliation with the provider's reference ID and status.",
                 "Confirm whether the provider issued a reference ID for this transaction.",
                 "Check for provider-side processing delays or API errors during the reconciliation call."
-            )
+            ),
+            RISK_MEDIUM
         );
     }
 
@@ -81,7 +96,7 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
     }
 
     private static Insight genericMismatch(TransactionStatus internal, ExternalStatus external) {
-        return new Insight(
+        return rb(
             String.format(
                 "The internal ledger status (%s) does not agree with the external provider status (%s). " +
                 "Possible causes include a synchronisation delay, an incorrect external reference ID, " +
@@ -92,8 +107,19 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
                 "Verify the external reference ID maps to the correct provider transaction.",
                 "Check provider logs for this referenceId.",
                 "Escalate to the payments operations team if the discrepancy cannot be explained."
-            )
+            ),
+            RISK_HIGH
         );
+    }
+
+    /** Stamps every mismatch insight with RULE_BASED source and HIGH risk. */
+    private static Insight mismatchInsight(String explanation, List<String> checks) {
+        return rb(explanation, checks, RISK_HIGH);
+    }
+
+    /** Creates a RULE_BASED insight with the given risk level. */
+    private static Insight rb(String explanation, List<String> checks, String riskLevel) {
+        return new Insight(explanation, checks, riskLevel, SOURCE);
     }
 
     // -------------------------------------------------------------------------
@@ -104,7 +130,7 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
         Map<String, Insight> m = new HashMap<>();
 
         // SUCCESS internal
-        m.put("SUCCESS-FAILED", new Insight(
+        m.put("SUCCESS-FAILED", mismatchInsight(
             "The internal ledger records this transaction as successful, but the external provider " +
             "reports it as failed. Possible causes include: the provider declined the transaction after " +
             "the internal commit was recorded, a delayed chargeback or reversal from the provider, or " +
@@ -117,7 +143,7 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
                 "Escalate to the payments operations team if the discrepancy cannot be explained."
             )
         ));
-        m.put("SUCCESS-PENDING", new Insight(
+        m.put("SUCCESS-PENDING", mismatchInsight(
             "The internal ledger records this transaction as successful, but the external provider " +
             "reports it as still pending. Possible causes include: a settlement delay on the provider " +
             "side, or the provider's state had not yet updated when this reconciliation was run.",
@@ -128,7 +154,7 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
                 "Monitor for a subsequent status update from the provider."
             )
         ));
-        m.put("SUCCESS-NOT_FOUND", new Insight(
+        m.put("SUCCESS-NOT_FOUND", mismatchInsight(
             "The internal ledger records this transaction as successful, but the external provider " +
             "has no record of it. Possible causes include: an incorrect external reference ID, " +
             "the transaction being routed through an intermediary, or a provider-side data retention issue.",
@@ -141,7 +167,7 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
         ));
 
         // FAILED internal
-        m.put("FAILED-SUCCESS", new Insight(
+        m.put("FAILED-SUCCESS", mismatchInsight(
             "The internal ledger records this transaction as failed, but the external provider " +
             "reports it as successful. Possible causes include: an internal processing error after " +
             "the provider confirmed the transaction, or funds may have moved externally without a " +
@@ -153,7 +179,7 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
                 "Escalate to the payments operations team — funds may have moved without a matching ledger record."
             )
         ));
-        m.put("FAILED-PENDING", new Insight(
+        m.put("FAILED-PENDING", mismatchInsight(
             "The internal ledger records this transaction as failed, but the external provider " +
             "reports it as pending. The provider may still be processing this transaction and has " +
             "not yet reached a terminal state.",
@@ -163,7 +189,7 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
                 "Verify whether the provider processed this transaction independently."
             )
         ));
-        m.put("FAILED-NOT_FOUND", new Insight(
+        m.put("FAILED-NOT_FOUND", mismatchInsight(
             "The internal ledger records this transaction as failed and the external provider has " +
             "no record of it. This may be expected if the transaction was rejected before submission " +
             "to the provider, but unusual if an external reference ID was supplied.",
@@ -175,7 +201,7 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
         ));
 
         // PENDING internal
-        m.put("PENDING-SUCCESS", new Insight(
+        m.put("PENDING-SUCCESS", mismatchInsight(
             "The internal ledger records this transaction as pending, but the external provider " +
             "reports it as successful. The provider may have settled before the internal confirmation " +
             "step was completed.",
@@ -186,7 +212,7 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
                 "Review reconciliation timing relative to the provider's settlement window."
             )
         ));
-        m.put("PENDING-FAILED", new Insight(
+        m.put("PENDING-FAILED", mismatchInsight(
             "The internal ledger records this transaction as pending, but the external provider " +
             "reports it as failed. Consider failing this transaction internally to align with the " +
             "provider's status.",
@@ -196,7 +222,7 @@ public class RuleBasedInsightGenerator implements InsightGenerator {
                 "Check whether a new transaction attempt is required."
             )
         ));
-        m.put("PENDING-NOT_FOUND", new Insight(
+        m.put("PENDING-NOT_FOUND", mismatchInsight(
             "The internal ledger records this transaction as pending and the external provider has " +
             "no record of it. Possible causes include: the transaction was not yet submitted to the " +
             "provider, or an incorrect external reference ID was used.",

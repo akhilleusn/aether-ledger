@@ -16,5 +16,12 @@ public interface InsightGenerator {
 
     Insight generate(LedgerTransaction tx);
 
-    record Insight(String explanation, List<String> recommendedChecks) {}
+    record Insight(
+        String explanation,
+        List<String> recommendedChecks,
+        /** {@code LOW}, {@code MEDIUM}, or {@code HIGH}. */
+        String riskLevel,
+        /** {@code RULE_BASED} or {@code AI}. */
+        String insightSource
+    ) {}
 }

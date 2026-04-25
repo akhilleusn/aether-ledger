@@ -40,7 +40,9 @@ public class ReconciliationInsightService {
             tx.getExternalStatus() != null ? tx.getExternalStatus().name() : null,
             tx.computeReconciliationResult().name(),
             insight.explanation(),
-            insight.recommendedChecks()
+            insight.recommendedChecks(),
+            insight.insightSource(),
+            insight.riskLevel()
         );
     }
 }

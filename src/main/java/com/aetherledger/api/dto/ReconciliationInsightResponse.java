@@ -30,5 +30,13 @@ public record ReconciliationInsightResponse(
     String explanation,
 
     @Schema(description = "Suggested checks for the operator to investigate further")
-    List<String> recommendedChecks
+    List<String> recommendedChecks,
+
+    @Schema(description = "Source of the insight: RULE_BASED (deterministic) or AI (language model)",
+            allowableValues = {"RULE_BASED", "AI"})
+    String insightSource,
+
+    @Schema(description = "Assessed risk level based on the reconciliation state",
+            allowableValues = {"LOW", "MEDIUM", "HIGH"})
+    String riskLevel
 ) {}
