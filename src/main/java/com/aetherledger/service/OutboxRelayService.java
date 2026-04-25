@@ -32,7 +32,8 @@ import java.util.List;
 public class OutboxRelayService {
 
     private final OutboxEventRepository outboxEventRepository;
-    private final OutboxRelayProcessor processor;
+    private final OutboxRelayProcessor  processor;
+    private final WebhookDeliveryService webhookDeliveryService;
 
     /**
      * Executes one relay pass.
@@ -51,6 +52,14 @@ public class OutboxRelayService {
             try {
                 processor.publishAndMark(event.getId());
                 published++;
+                // Dispatch webhooks in a separate try-catch: a delivery failure
+                // must never affect the outbox relay's published/failed counts.
+                try {
+                    webhookDeliveryService.dispatchForEvent(event);
+                } catch (Exception e) {
+                    log.warn("Webhook dispatch failed for outbox event id={}: {}",
+                        event.getId(), e.getMessage());
+                }
             } catch (Exception e) {
                 log.warn("Failed to publish outbox event: id={} type={} reason={}",
                     event.getId(), event.getEventType(), e.getMessage());

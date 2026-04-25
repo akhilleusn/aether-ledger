@@ -11,6 +11,7 @@ import com.aetherledger.exception.TransactionNotCompletableException;
 import com.aetherledger.exception.TransactionNotFailableException;
 import com.aetherledger.exception.ReconciliationRunNotFoundException;
 import com.aetherledger.exception.TransactionNotReversibleException;
+import com.aetherledger.exception.WebhookSubscriptionNotFoundException;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -189,6 +190,16 @@ public class GlobalExceptionHandler {
 
         log.warn("Reconciliation run not found on {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.NOT_FOUND, "RECONCILIATION_RUN_NOT_FOUND", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(WebhookSubscriptionNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleWebhookSubscriptionNotFound(
+            WebhookSubscriptionNotFoundException ex,
+            HttpServletRequest request) {
+
+        log.warn("Webhook subscription not found on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.NOT_FOUND, "WEBHOOK_SUBSCRIPTION_NOT_FOUND", ex.getMessage(), request);
     }
 
     @ExceptionHandler(DuplicateReferenceIdException.class)

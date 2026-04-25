@@ -3,6 +3,8 @@ package com.aetherledger.api;
 import com.aetherledger.domain.entity.OutboxEvent;
 import com.aetherledger.domain.enums.OutboxEventType;
 import com.aetherledger.repository.OutboxEventRepository;
+import com.aetherledger.repository.WebhookDeliveryRepository;
+import com.aetherledger.repository.WebhookSubscriptionRepository;
 import com.aetherledger.service.OutboxRelayService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,11 +32,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("Outbox relay")
 class OutboxRelayTest extends AbstractIntegrationTest {
 
-    @Autowired OutboxRelayService relayService;
-    @Autowired OutboxEventRepository outboxEventRepository;
+    @Autowired OutboxRelayService            relayService;
+    @Autowired OutboxEventRepository         outboxEventRepository;
+    @Autowired WebhookDeliveryRepository     webhookDeliveryRepository;
+    @Autowired WebhookSubscriptionRepository webhookSubscriptionRepository;
 
     @BeforeEach
     void setUp() {
+        webhookDeliveryRepository.deleteAllInBatch();
+        webhookSubscriptionRepository.deleteAllInBatch();
         outboxEventRepository.deleteAllInBatch();
     }
 
