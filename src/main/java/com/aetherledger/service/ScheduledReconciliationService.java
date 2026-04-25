@@ -57,12 +57,12 @@ public class ScheduledReconciliationService {
      * the rest of the batch.
      */
     public void processUnreconciled() {
-        log.info("Scheduled reconciliation job started");
+        log.debug("Scheduled reconciliation job triggered");
 
         List<LedgerTransaction> candidates = ledgerTransactionRepository.findUnreconciled();
 
         if (candidates.isEmpty()) {
-            log.info("Scheduled reconciliation job: no unreconciled transactions found");
+            log.debug("Scheduled reconciliation job: no unreconciled transactions found");
             return;
         }
 

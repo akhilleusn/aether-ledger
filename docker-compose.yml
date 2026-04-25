@@ -27,6 +27,12 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
 
 volumes:
   postgres_data:

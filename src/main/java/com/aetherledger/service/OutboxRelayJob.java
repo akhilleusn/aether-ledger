@@ -30,9 +30,13 @@ public class OutboxRelayJob {
 
     @Scheduled(fixedRateString = "${outbox.relay.interval:30000}")
     public void run() {
-        log.info("Outbox relay job started");
+        log.debug("Outbox relay job triggered");
         OutboxRelayService.RelayResult result = relayService.relay();
-        log.info("Outbox relay job complete: total={} published={} failed={}",
-            result.total(), result.published(), result.failed());
+        if (result.total() > 0) {
+            log.info("Outbox relay job complete: total={} published={} failed={}",
+                result.total(), result.published(), result.failed());
+        } else {
+            log.debug("Outbox relay job: no pending events");
+        }
     }
 }

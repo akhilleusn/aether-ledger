@@ -234,12 +234,13 @@ public class LedgerTransactionService {
         }
 
         tx.markAsFailed();
-        tx = ledgerTransactionRepository.save(tx);
+        ledgerTransactionRepository.save(tx);
 
         log.info("Pending transaction failed: id={} referenceId='{}'",
             tx.getId(), tx.getReferenceId());
 
-        return tx;
+        return ledgerTransactionRepository.findByIdWithEntries(transactionId).orElseThrow(
+            () -> new LedgerTransactionNotFoundException("id", transactionId.toString()));
     }
 
     // -------------------------------------------------------------------------
@@ -358,11 +359,14 @@ public class LedgerTransactionService {
             .orElseThrow(() -> new LedgerTransactionNotFoundException("id", transactionId.toString()));
 
         tx.reconcile(externalReferenceId, externalStatus);
-        tx = ledgerTransactionRepository.save(tx);
+        ledgerTransactionRepository.save(tx);
 
         log.info("Transaction reconciled: id={} externalReferenceId='{}' externalStatus={} result={}",
-            tx.getId(), tx.getExternalReferenceId(), tx.getExternalStatus(),
+            transactionId, externalReferenceId, externalStatus,
             tx.computeReconciliationResult());
+
+        tx = ledgerTransactionRepository.findByIdWithEntries(transactionId).orElseThrow(
+            () -> new LedgerTransactionNotFoundException("id", transactionId.toString()));
 
         outboxService.publishTransactionReconciled(tx);
 
