@@ -31,9 +31,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OutboxRelayService {
 
-    private final OutboxEventRepository outboxEventRepository;
-    private final OutboxRelayProcessor  processor;
+    private final OutboxEventRepository  outboxEventRepository;
+    private final OutboxRelayProcessor   processor;
     private final WebhookDeliveryService webhookDeliveryService;
+    private final LedgerMetrics          ledgerMetrics;
 
     /**
      * Executes one relay pass.
@@ -52,6 +53,7 @@ public class OutboxRelayService {
             try {
                 processor.publishAndMark(event.getId());
                 published++;
+                ledgerMetrics.outboxPublished(event.getEventType());
                 // Dispatch webhooks in a separate try-catch: a delivery failure
                 // must never affect the outbox relay's published/failed counts.
                 try {
@@ -64,6 +66,7 @@ public class OutboxRelayService {
                 log.warn("Failed to publish outbox event: id={} type={} reason={}",
                     event.getId(), event.getEventType(), e.getMessage());
                 failed++;
+                ledgerMetrics.outboxPublishFailed();
             }
         }
 

@@ -65,6 +65,7 @@ public class LedgerTransactionService {
     private final LedgerTransactionRepository ledgerTransactionRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
     private final OutboxService outboxService;
+    private final LedgerMetrics ledgerMetrics;
 
     /**
      * Posts a double-entry ledger transaction atomically.
@@ -126,6 +127,7 @@ public class LedgerTransactionService {
             command.amount()
         );
 
+        ledgerMetrics.transactionPosted();
         outboxService.publishTransactionPosted(
             ledgerTx, command.debitAccountId(), command.creditAccountId(), command.amount());
 
@@ -210,6 +212,7 @@ public class LedgerTransactionService {
         log.info("Pending transaction completed: id={} referenceId='{}' amount={}",
             tx.getId(), tx.getReferenceId(), tx.getAmount());
 
+        ledgerMetrics.transactionCompleted();
         outboxService.publishTransactionCompleted(tx);
 
         return tx;
@@ -239,6 +242,7 @@ public class LedgerTransactionService {
         log.info("Pending transaction failed: id={} referenceId='{}'",
             tx.getId(), tx.getReferenceId());
 
+        ledgerMetrics.transactionFailed();
         return ledgerTransactionRepository.findByIdWithEntries(transactionId).orElseThrow(
             () -> new LedgerTransactionNotFoundException("id", transactionId.toString()));
     }
@@ -332,6 +336,7 @@ public class LedgerTransactionService {
         log.info("Transaction reversed: originalId={} reversalId={} reversalReferenceId='{}'",
             original.getId(), reversal.getId(), reversal.getReferenceId());
 
+        ledgerMetrics.transactionReversed();
         outboxService.publishTransactionReversed(reversal);
 
         return reversal;
@@ -361,9 +366,15 @@ public class LedgerTransactionService {
         tx.reconcile(externalReferenceId, externalStatus);
         ledgerTransactionRepository.save(tx);
 
+        var result = tx.computeReconciliationResult();
         log.info("Transaction reconciled: id={} externalReferenceId='{}' externalStatus={} result={}",
-            transactionId, externalReferenceId, externalStatus,
-            tx.computeReconciliationResult());
+            transactionId, externalReferenceId, externalStatus, result);
+
+        switch (result) {
+            case MATCHED       -> ledgerMetrics.reconciliationMatched();
+            case STATUS_MISMATCH -> ledgerMetrics.reconciliationMismatched();
+            default -> {}
+        }
 
         tx = ledgerTransactionRepository.findByIdWithEntries(transactionId).orElseThrow(
             () -> new LedgerTransactionNotFoundException("id", transactionId.toString()));

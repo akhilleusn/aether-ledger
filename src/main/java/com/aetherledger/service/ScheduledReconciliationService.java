@@ -42,6 +42,7 @@ public class ScheduledReconciliationService {
 
     private final LedgerTransactionRepository ledgerTransactionRepository;
     private final ExternalReconciliationClient externalClient;
+    private final LedgerMetrics ledgerMetrics;
 
     @Autowired
     @Lazy
@@ -75,18 +76,23 @@ public class ScheduledReconciliationService {
                 ReconciliationResult result = self.processSingle(tx.getId());
                 if (result == null) {
                     skipped++;
+                    ledgerMetrics.scheduledReconciliationSkipped();
                 } else if (result == ReconciliationResult.MATCHED) {
                     matched++;
+                    ledgerMetrics.scheduledReconciliationProcessed();
                 } else {
                     mismatch++;
+                    ledgerMetrics.scheduledReconciliationProcessed();
                 }
             } catch (ObjectOptimisticLockingFailureException | OptimisticLockException e) {
                 log.debug("Skipping transaction id={}: claimed by a concurrent scheduler instance",
                     tx.getId());
                 skipped++;
+                ledgerMetrics.scheduledReconciliationSkipped();
             } catch (Exception e) {
                 log.error("Failed to reconcile transaction id={}: {}", tx.getId(), e.getMessage(), e);
                 failed++;
+                ledgerMetrics.scheduledReconciliationFailed();
             }
         }
 

@@ -41,6 +41,7 @@ public class WebhookDeliveryService {
     private final WebhookSubscriptionRepository subscriptionRepository;
     private final WebhookDeliveryRepository     deliveryRepository;
     private final WebhookClient                 webhookClient;
+    private final LedgerMetrics                 ledgerMetrics;
 
     /**
      * Finds all active subscriptions matching the event's type and delivers
@@ -75,10 +76,12 @@ public class WebhookDeliveryService {
 
             if (result.succeeded()) {
                 delivery.markSuccess();
+                ledgerMetrics.webhookDelivered(event.getEventType());
                 log.debug("Webhook delivery succeeded: subscriptionId={} eventId={}",
                     sub.getId(), event.getId());
             } else {
                 delivery.markFailed(result.errorMessage());
+                ledgerMetrics.webhookFailed(event.getEventType());
                 log.warn("Webhook delivery failed: subscriptionId={} eventId={} error={}",
                     sub.getId(), event.getId(), result.errorMessage());
             }
