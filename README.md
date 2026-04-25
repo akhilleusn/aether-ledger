@@ -114,6 +114,7 @@ Account rows are locked with `SELECT ... FOR UPDATE` before any balance-affectin
 - **Per-violation drill-down** — list the specific transactions that are driving an unhealthy integrity report
 - **Paginated transaction list** — newest-first, configurable page size up to 100
 - **Idempotent write operations** — safe to retry without risk of duplication
+- **AI-ready reconciliation insights** — `GET /{id}/reconciliation-insight` returns an operator-facing explanation of any reconciliation anomaly with specific possible causes and recommended checks. Rule-based by default; swap the `InsightGenerator` bean for a Claude or OpenAI adapter with no changes to callers
 - **Uniform error envelope** — every error returns `{ status, errorCode, message, timestamp, path }` with machine-readable `errorCode` values
 - **OpenAPI / Swagger UI** — full API documentation with schema descriptions, example values, and error response shapes
 
@@ -382,6 +383,7 @@ docker-compose.yml                # postgres + app, healthcheck, volumes
 
 ## Future improvements
 
+- **AI provider integration** — replace `RuleBasedInsightGenerator` with a Claude or OpenAI adapter to produce language-model-generated reconciliation explanations
 - **Authentication and authorization** — JWT-based auth with per-account access control
 - **Multi-currency support** — ISO 4217 currency codes on transactions and entries, FX rate ledger
 - **Cursor-based pagination** — replace offset pagination with keyset pagination for large ledgers

@@ -4,11 +4,13 @@ import com.aetherledger.api.dto.ErrorResponse;
 import com.aetherledger.api.dto.PageResponse;
 import com.aetherledger.api.dto.PostTransactionRequest;
 import com.aetherledger.api.dto.ReconcileRequest;
+import com.aetherledger.api.dto.ReconciliationInsightResponse;
 import com.aetherledger.api.dto.ReversalRequest;
 import com.aetherledger.api.dto.TransactionDetailResponse;
 import com.aetherledger.api.dto.TransactionResponse;
 import com.aetherledger.api.dto.TransactionSummaryResponse;
 import com.aetherledger.service.LedgerTransactionService;
+import com.aetherledger.service.ReconciliationInsightService;
 import com.aetherledger.service.command.PostTransactionCommand;
 import com.aetherledger.service.command.ReverseTransactionCommand;
 import io.swagger.v3.oas.annotations.Operation;
@@ -51,6 +53,7 @@ public class LedgerTransactionController {
     private static final int MAX_PAGE_SIZE     = 100;
 
     private final LedgerTransactionService ledgerTransactionService;
+    private final ReconciliationInsightService reconciliationInsightService;
 
     @Operation(
         summary = "Post a transaction (immediate)",
@@ -244,6 +247,27 @@ public class LedgerTransactionController {
         log.debug("Reconciling transaction: id={} externalStatus={}", id, request.externalStatus());
         return TransactionDetailResponse.from(
             ledgerTransactionService.reconcile(id, request.externalReferenceId(), request.externalStatus()));
+    }
+
+    @Operation(
+        summary = "Get reconciliation insight",
+        description = "Returns an operator-facing explanation of the transaction's reconciliation state. " +
+            "For STATUS_MISMATCH transactions the response includes specific possible causes and recommended " +
+            "investigative steps. The explanation engine is rule-based by default and is designed to be " +
+            "swapped for an AI provider (e.g. Claude) without changes to callers."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Insight generated successfully"),
+        @ApiResponse(responseCode = "400", description = "Path variable is not a valid UUID",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Transaction not found",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/{id}/reconciliation-insight")
+    public ReconciliationInsightResponse getReconciliationInsight(
+            @Parameter(description = "Transaction UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID id) {
+        return reconciliationInsightService.getInsight(id);
     }
 
     @Operation(
