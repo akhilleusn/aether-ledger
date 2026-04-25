@@ -149,7 +149,7 @@ public class AuditTimelineService {
     }
 
     private static AuditTimelineItemResponse reconciliationRecorded(LedgerTransaction tx) {
-        Map<String, String> metadata;
+        Map<String, Object> metadata;
         if (tx.getExternalReferenceId() != null && tx.getExternalStatus() != null) {
             metadata = Map.of(
                 "externalReferenceId",  tx.getExternalReferenceId(),

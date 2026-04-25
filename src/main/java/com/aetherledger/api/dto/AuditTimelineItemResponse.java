@@ -31,5 +31,5 @@ public record AuditTimelineItemResponse(
     String source,
 
     @Schema(description = "Additional key-value pairs providing event-specific context")
-    Map<String, String> metadata
+    Map<String, Object> metadata
 ) {}
