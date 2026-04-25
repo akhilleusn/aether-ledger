@@ -34,6 +34,13 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
     long countByPublishedFalse();
 
     /**
+     * Returns all outbox events for the given aggregate (e.g. a transaction UUID),
+     * ordered oldest-first.  Used by the audit timeline to surface outbox activity
+     * for a specific transaction.
+     */
+    List<OutboxEvent> findByAggregateIdOrderByCreatedAtAsc(UUID aggregateId);
+
+    /**
      * Fetches a single event with a pessimistic write lock.
      * Used by the relay processor to prevent two concurrent relay instances
      * from publishing the same event twice.

@@ -1,5 +1,6 @@
 package com.aetherledger.api;
 
+import com.aetherledger.api.dto.AuditTimelineItemResponse;
 import com.aetherledger.api.dto.ErrorResponse;
 import com.aetherledger.api.dto.PageResponse;
 import com.aetherledger.api.dto.PostTransactionRequest;
@@ -9,6 +10,7 @@ import com.aetherledger.api.dto.ReversalRequest;
 import com.aetherledger.api.dto.TransactionDetailResponse;
 import com.aetherledger.api.dto.TransactionResponse;
 import com.aetherledger.api.dto.TransactionSummaryResponse;
+import com.aetherledger.service.AuditTimelineService;
 import com.aetherledger.service.LedgerTransactionService;
 import com.aetherledger.service.ReconciliationInsightService;
 import com.aetherledger.service.command.PostTransactionCommand;
@@ -54,6 +56,7 @@ public class LedgerTransactionController {
 
     private final LedgerTransactionService ledgerTransactionService;
     private final ReconciliationInsightService reconciliationInsightService;
+    private final AuditTimelineService auditTimelineService;
 
     @Operation(
         summary = "Post a transaction (immediate)",
@@ -247,6 +250,27 @@ public class LedgerTransactionController {
         log.debug("Reconciling transaction: id={} externalStatus={}", id, request.externalStatus());
         return TransactionDetailResponse.from(
             ledgerTransactionService.reconcile(id, request.externalReferenceId(), request.externalStatus()));
+    }
+
+    @Operation(
+        summary = "Get audit timeline",
+        description = "Returns a chronological list of events for a transaction, assembled from " +
+            "existing tables: ledger_transactions, ledger_entries, and outbox_events. " +
+            "Events include transaction creation, ledger entry writes, reversal links, " +
+            "reconciliation, and outbox delivery history. Sorted by occurredAt ascending."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Timeline returned (may be empty for unknown states)"),
+        @ApiResponse(responseCode = "400", description = "Path variable is not a valid UUID",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Transaction not found",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/{id}/audit-timeline")
+    public List<AuditTimelineItemResponse> getAuditTimeline(
+            @Parameter(description = "Transaction UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID id) {
+        return auditTimelineService.getTimeline(id);
     }
 
     @Operation(
