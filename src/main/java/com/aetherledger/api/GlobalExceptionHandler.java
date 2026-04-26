@@ -8,6 +8,7 @@ import com.aetherledger.exception.DuplicateReferenceIdException;
 import com.aetherledger.exception.HoldNotCapturableException;
 import com.aetherledger.exception.HoldNotFoundException;
 import com.aetherledger.exception.HoldNotReleasableException;
+import com.aetherledger.exception.IdempotencyKeyConflictException;
 import com.aetherledger.exception.InvalidTransactionRequestException;
 import com.aetherledger.exception.LedgerTransactionNotFoundException;
 import com.aetherledger.exception.TransactionAlreadyReversedException;
@@ -244,6 +245,16 @@ public class GlobalExceptionHandler {
 
         log.warn("Hold not releasable on {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.UNPROCESSABLE_ENTITY, "HOLD_NOT_RELEASABLE", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(IdempotencyKeyConflictException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleIdempotencyKeyConflict(
+            IdempotencyKeyConflictException ex,
+            HttpServletRequest request) {
+
+        log.warn("Idempotency key conflict on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.CONFLICT, "IDEMPOTENCY_KEY_CONFLICT", ex.getMessage(), request);
     }
 
     @ExceptionHandler(DuplicateReferenceIdException.class)

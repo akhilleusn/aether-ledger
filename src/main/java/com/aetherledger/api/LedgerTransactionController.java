@@ -11,6 +11,7 @@ import com.aetherledger.api.dto.TransactionDetailResponse;
 import com.aetherledger.api.dto.TransactionResponse;
 import com.aetherledger.api.dto.TransactionSummaryResponse;
 import com.aetherledger.service.AuditTimelineService;
+import com.aetherledger.service.IdempotencyService;
 import com.aetherledger.service.LedgerTransactionService;
 import com.aetherledger.service.ReconciliationInsightService;
 import com.aetherledger.service.command.PostTransactionCommand;
@@ -30,6 +31,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -57,13 +59,17 @@ public class LedgerTransactionController {
     private final LedgerTransactionService ledgerTransactionService;
     private final ReconciliationInsightService reconciliationInsightService;
     private final AuditTimelineService auditTimelineService;
+    private final IdempotencyService idempotencyService;
 
     @Operation(
         summary = "Post a transaction (immediate)",
         description = "Creates and immediately settles a double-entry transaction. " +
             "Debits `debitAccountId` and credits `creditAccountId` by `amount`. " +
             "The resulting transaction has status `SUCCESS`. " +
-            "`referenceId` is an idempotency key — submitting the same value twice returns 409."
+            "`referenceId` is a business-level idempotency key stored on the transaction. " +
+            "Optionally supply `Idempotency-Key` header for HTTP-level retry safety: " +
+            "subsequent requests with the same header and body return the original 201 response " +
+            "without creating a duplicate transaction."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Transaction posted and settled"),
@@ -71,13 +77,28 @@ public class LedgerTransactionController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(responseCode = "404", description = "Debit or credit account not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-        @ApiResponse(responseCode = "409", description = "Duplicate referenceId",
+        @ApiResponse(responseCode = "409", description = "Duplicate referenceId, or Idempotency-Key reused with a different request body",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public TransactionResponse post(@RequestBody @Valid PostTransactionRequest request) {
-        log.debug("Posting ledger transaction: referenceId={}", request.referenceId());
+    public ResponseEntity<TransactionResponse> post(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody @Valid PostTransactionRequest request) {
+
+        log.debug("Posting ledger transaction: referenceId='{}' idempotencyKey='{}'",
+            request.referenceId(), idempotencyKey);
+
+        boolean hasKey = idempotencyKey != null && !idempotencyKey.isBlank();
+        String fingerprint = hasKey ? idempotencyService.fingerprint(request) : null;
+
+        if (hasKey) {
+            var cached = idempotencyService.findExisting(idempotencyKey, fingerprint);
+            if (cached.isPresent()) {
+                TransactionResponse body = idempotencyService.deserialize(
+                    cached.get().body(), TransactionResponse.class);
+                return ResponseEntity.status(cached.get().status()).body(body);
+            }
+        }
 
         PostTransactionCommand command = new PostTransactionCommand(
             request.debitAccountId(),
@@ -85,8 +106,13 @@ public class LedgerTransactionController {
             request.amount(),
             request.referenceId()
         );
+        TransactionResponse response = TransactionResponse.from(ledgerTransactionService.post(command));
 
-        return TransactionResponse.from(ledgerTransactionService.post(command));
+        if (hasKey) {
+            idempotencyService.store(idempotencyKey, fingerprint, HttpStatus.CREATED.value(), response);
+        }
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @Operation(
