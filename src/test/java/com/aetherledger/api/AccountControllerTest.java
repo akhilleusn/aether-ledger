@@ -3,6 +3,7 @@ package com.aetherledger.api;
 import com.aetherledger.domain.entity.Account;
 import com.aetherledger.domain.enums.AccountType;
 import com.aetherledger.repository.AccountRepository;
+import com.aetherledger.repository.HoldRepository;
 import com.aetherledger.repository.LedgerEntryRepository;
 import com.aetherledger.repository.LedgerTransactionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,13 +40,15 @@ class AccountControllerTest extends AbstractIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired AccountRepository accountRepository;
+    @Autowired HoldRepository holdRepository;
     @Autowired LedgerTransactionRepository ledgerTransactionRepository;
     @Autowired LedgerEntryRepository ledgerEntryRepository;
 
     @BeforeEach
     void setUp() {
-        // Delete in FK-safe order: entries → transactions → accounts
+        // Delete in FK-safe order: entries → holds → transactions → accounts
         ledgerEntryRepository.deleteAllInBatch();
+        holdRepository.deleteAllInBatch();
         ledgerTransactionRepository.deleteAllInBatch();
         accountRepository.deleteAllInBatch();
     }

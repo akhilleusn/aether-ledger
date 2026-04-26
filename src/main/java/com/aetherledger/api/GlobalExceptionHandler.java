@@ -3,7 +3,11 @@ package com.aetherledger.api;
 import com.aetherledger.api.dto.ErrorResponse;
 import com.aetherledger.exception.AccountNotFoundException;
 import com.aetherledger.exception.DuplicateAccountNameException;
+import com.aetherledger.exception.DuplicateHoldReferenceIdException;
 import com.aetherledger.exception.DuplicateReferenceIdException;
+import com.aetherledger.exception.HoldNotCapturableException;
+import com.aetherledger.exception.HoldNotFoundException;
+import com.aetherledger.exception.HoldNotReleasableException;
 import com.aetherledger.exception.InvalidTransactionRequestException;
 import com.aetherledger.exception.LedgerTransactionNotFoundException;
 import com.aetherledger.exception.TransactionAlreadyReversedException;
@@ -200,6 +204,46 @@ public class GlobalExceptionHandler {
 
         log.warn("Webhook subscription not found on {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.NOT_FOUND, "WEBHOOK_SUBSCRIPTION_NOT_FOUND", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(HoldNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleHoldNotFound(
+            HoldNotFoundException ex,
+            HttpServletRequest request) {
+
+        log.warn("Hold not found on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.NOT_FOUND, "HOLD_NOT_FOUND", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(DuplicateHoldReferenceIdException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleDuplicateHoldReferenceId(
+            DuplicateHoldReferenceIdException ex,
+            HttpServletRequest request) {
+
+        log.warn("Duplicate hold referenceId on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.CONFLICT, "DUPLICATE_HOLD_REFERENCE_ID", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(HoldNotCapturableException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    public ErrorResponse handleHoldNotCapturable(
+            HoldNotCapturableException ex,
+            HttpServletRequest request) {
+
+        log.warn("Hold not capturable on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, "HOLD_NOT_CAPTURABLE", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(HoldNotReleasableException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    public ErrorResponse handleHoldNotReleasable(
+            HoldNotReleasableException ex,
+            HttpServletRequest request) {
+
+        log.warn("Hold not releasable on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, "HOLD_NOT_RELEASABLE", ex.getMessage(), request);
     }
 
     @ExceptionHandler(DuplicateReferenceIdException.class)

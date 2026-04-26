@@ -3,6 +3,7 @@ package com.aetherledger.api;
 import com.aetherledger.domain.entity.Account;
 import com.aetherledger.domain.enums.AccountType;
 import com.aetherledger.repository.AccountRepository;
+import com.aetherledger.repository.HoldRepository;
 import com.aetherledger.repository.LedgerEntryRepository;
 import com.aetherledger.repository.LedgerTransactionRepository;
 import com.aetherledger.repository.ReconciliationRunItemRepository;
@@ -50,6 +51,7 @@ class ReconciliationInsightControllerTest extends AbstractIntegrationTest {
     @Autowired MockMvc                        mockMvc;
     @Autowired ObjectMapper                   objectMapper;
     @Autowired AccountRepository              accountRepository;
+    @Autowired HoldRepository                 holdRepository;
     @Autowired LedgerTransactionRepository    ledgerTransactionRepository;
     @Autowired LedgerEntryRepository          ledgerEntryRepository;
     @Autowired ReconciliationRunItemRepository reconciliationRunItemRepository;
@@ -60,10 +62,11 @@ class ReconciliationInsightControllerTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // FK-safe order: run_items → runs → entries → transactions → accounts
+        // FK-safe order: run_items → runs → entries → holds → transactions → accounts
         reconciliationRunItemRepository.deleteAllInBatch();
         reconciliationRunRepository.deleteAllInBatch();
         ledgerEntryRepository.deleteAllInBatch();
+        holdRepository.deleteAllInBatch();
         ledgerTransactionRepository.deleteAllInBatch();
         accountRepository.deleteAllInBatch();
 

@@ -5,6 +5,7 @@ import com.aetherledger.domain.entity.WebhookSubscription;
 import com.aetherledger.domain.enums.AccountType;
 import com.aetherledger.domain.enums.WebhookDeliveryStatus;
 import com.aetherledger.repository.AccountRepository;
+import com.aetherledger.repository.HoldRepository;
 import com.aetherledger.repository.LedgerEntryRepository;
 import com.aetherledger.repository.LedgerTransactionRepository;
 import com.aetherledger.repository.OutboxEventRepository;
@@ -54,6 +55,7 @@ class WebhookDeliveryIntegrationTest extends AbstractIntegrationTest {
     @Autowired LedgerEntryRepository          ledgerEntryRepository;
     @Autowired LedgerTransactionRepository    ledgerTransactionRepository;
     @Autowired AccountRepository              accountRepository;
+    @Autowired HoldRepository                 holdRepository;
     @Autowired ReconciliationRunItemRepository reconciliationRunItemRepository;
     @Autowired ReconciliationRunRepository    reconciliationRunRepository;
 
@@ -68,6 +70,7 @@ class WebhookDeliveryIntegrationTest extends AbstractIntegrationTest {
         reconciliationRunRepository.deleteAllInBatch();
         outboxEventRepository.deleteAllInBatch();
         ledgerEntryRepository.deleteAllInBatch();
+        holdRepository.deleteAllInBatch();
         ledgerTransactionRepository.deleteAllInBatch();
         accountRepository.deleteAllInBatch();
 

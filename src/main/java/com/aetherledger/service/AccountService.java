@@ -3,10 +3,12 @@ package com.aetherledger.service;
 import com.aetherledger.domain.entity.Account;
 import com.aetherledger.domain.entity.LedgerEntry;
 import com.aetherledger.domain.enums.AccountType;
+import com.aetherledger.domain.enums.HoldStatus;
 import com.aetherledger.exception.AccountNotFoundException;
 import com.aetherledger.exception.DuplicateAccountNameException;
 import com.aetherledger.repository.AccountBalanceSummary;
 import com.aetherledger.repository.AccountRepository;
+import com.aetherledger.repository.HoldRepository;
 import com.aetherledger.repository.LedgerEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +29,7 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
+    private final HoldRepository holdRepository;
 
     /**
      * Creates a new account.
@@ -106,5 +109,27 @@ public class AccountService {
         return ledgerEntryRepository.findByAccountIdWithTransaction(accountId);
     }
 
+    /**
+     * Returns the three-way balance breakdown for an account:
+     * current (ledger), held (active holds), and available (current − held).
+     */
+    @Transactional(readOnly = true)
+    public AccountBalance getBalance(UUID accountId) {
+        if (!accountRepository.existsById(accountId)) {
+            throw new AccountNotFoundException(accountId, "id");
+        }
+        BigDecimal currentBalance = ledgerEntryRepository.sumAmountByAccountId(accountId);
+        BigDecimal heldBalance    = holdRepository.sumAmountByAccountIdAndStatus(accountId, HoldStatus.ACTIVE);
+        BigDecimal availableBalance = currentBalance.subtract(heldBalance);
+        return new AccountBalance(accountId, currentBalance, heldBalance, availableBalance);
+    }
+
     public record AccountWithBalance(Account account, BigDecimal currentBalance) {}
+
+    public record AccountBalance(
+        UUID       accountId,
+        BigDecimal currentBalance,
+        BigDecimal heldBalance,
+        BigDecimal availableBalance
+    ) {}
 }

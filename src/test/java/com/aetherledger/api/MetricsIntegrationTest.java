@@ -6,6 +6,7 @@ import com.aetherledger.domain.entity.WebhookSubscription;
 import com.aetherledger.domain.enums.AccountType;
 import com.aetherledger.domain.enums.OutboxEventType;
 import com.aetherledger.repository.AccountRepository;
+import com.aetherledger.repository.HoldRepository;
 import com.aetherledger.repository.LedgerEntryRepository;
 import com.aetherledger.repository.LedgerTransactionRepository;
 import com.aetherledger.repository.OutboxEventRepository;
@@ -55,6 +56,7 @@ class MetricsIntegrationTest extends AbstractIntegrationTest {
     @Autowired ObjectMapper                   objectMapper;
     @Autowired OutboxRelayService             relayService;
     @Autowired AccountRepository              accountRepository;
+    @Autowired HoldRepository                 holdRepository;
     @Autowired LedgerEntryRepository          ledgerEntryRepository;
     @Autowired LedgerTransactionRepository    ledgerTransactionRepository;
     @Autowired OutboxEventRepository          outboxEventRepository;
@@ -74,6 +76,7 @@ class MetricsIntegrationTest extends AbstractIntegrationTest {
         reconciliationRunRepository.deleteAllInBatch();
         outboxEventRepository.deleteAllInBatch();
         ledgerEntryRepository.deleteAllInBatch();
+        holdRepository.deleteAllInBatch();
         ledgerTransactionRepository.deleteAllInBatch();
         accountRepository.deleteAllInBatch();
 

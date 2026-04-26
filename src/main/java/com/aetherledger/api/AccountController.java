@@ -1,5 +1,6 @@
 package com.aetherledger.api;
 
+import com.aetherledger.api.dto.AccountBalanceResponse;
 import com.aetherledger.api.dto.AccountCreatedResponse;
 import com.aetherledger.api.dto.AccountLedgerEntryResponse;
 import com.aetherledger.api.dto.AccountResponse;
@@ -78,6 +79,25 @@ public class AccountController {
         return accountService.list().stream()
             .map(awb -> AccountResponse.from(awb.account(), awb.currentBalance()))
             .toList();
+    }
+
+    @Operation(
+        summary = "Get balance breakdown for an account",
+        description = "Returns currentBalance (ledger sum), heldBalance (sum of ACTIVE holds), and availableBalance (current − held)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Balance retrieved"),
+        @ApiResponse(responseCode = "400", description = "Path variable is not a valid UUID",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Account not found",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/{id}/balance")
+    public AccountBalanceResponse getBalance(
+            @Parameter(description = "Account UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID id) {
+        AccountService.AccountBalance b = accountService.getBalance(id);
+        return new AccountBalanceResponse(b.accountId(), b.currentBalance(), b.heldBalance(), b.availableBalance());
     }
 
     @Operation(

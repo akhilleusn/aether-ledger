@@ -1,5 +1,6 @@
 package com.aetherledger.service;
 
+import com.aetherledger.domain.entity.Hold;
 import com.aetherledger.domain.entity.LedgerTransaction;
 import com.aetherledger.domain.entity.OutboxEvent;
 import com.aetherledger.domain.entity.ReconciliationRun;
@@ -35,6 +36,7 @@ public class OutboxService {
 
     static final String AGGREGATE_LEDGER_TRANSACTION  = "LEDGER_TRANSACTION";
     static final String AGGREGATE_RECONCILIATION_RUN  = "RECONCILIATION_RUN";
+    static final String AGGREGATE_HOLD                = "HOLD";
 
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
@@ -126,6 +128,33 @@ public class OutboxService {
         payload.put("missingExternalReferenceCount", run.getMissingExternalReferenceCount());
         payload.put("createdAt",                   run.getCreatedAt().toString());
         persist(OutboxEventType.BATCH_RECONCILIATION_COMPLETED, run.getId(), AGGREGATE_RECONCILIATION_RUN, payload);
+    }
+
+    // -------------------------------------------------------------------------
+    // Hold lifecycle events
+    // -------------------------------------------------------------------------
+
+    public void publishHoldCreated(Hold hold) {
+        persist(OutboxEventType.HOLD_CREATED, hold.getId(), AGGREGATE_HOLD, holdPayload(hold));
+    }
+
+    public void publishHoldCaptured(Hold hold) {
+        persist(OutboxEventType.HOLD_CAPTURED, hold.getId(), AGGREGATE_HOLD, holdPayload(hold));
+    }
+
+    public void publishHoldReleased(Hold hold) {
+        persist(OutboxEventType.HOLD_RELEASED, hold.getId(), AGGREGATE_HOLD, holdPayload(hold));
+    }
+
+    private static Map<String, Object> holdPayload(Hold hold) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("holdId",      hold.getId());
+        p.put("accountId",   hold.getAccountId());
+        p.put("referenceId", hold.getReferenceId());
+        p.put("amount",      hold.getAmount().toPlainString());
+        p.put("status",      hold.getStatus().name());
+        p.put("createdAt",   hold.getCreatedAt().toString());
+        return p;
     }
 
     // -------------------------------------------------------------------------

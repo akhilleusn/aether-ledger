@@ -6,6 +6,7 @@ import com.aetherledger.domain.enums.AccountType;
 import com.aetherledger.domain.enums.ExternalStatus;
 import com.aetherledger.domain.enums.ReconciliationResult;
 import com.aetherledger.repository.AccountRepository;
+import com.aetherledger.repository.HoldRepository;
 import com.aetherledger.repository.LedgerEntryRepository;
 import com.aetherledger.repository.LedgerTransactionRepository;
 import com.aetherledger.repository.ReconciliationRunItemRepository;
@@ -62,16 +63,18 @@ class ScheduledReconciliationServiceTest extends AbstractIntegrationTest {
     @Autowired ReconciliationRunItemRepository reconciliationRunItemRepository;
     @Autowired ReconciliationRunRepository reconciliationRunRepository;
     @Autowired AccountRepository accountRepository;
+    @Autowired HoldRepository holdRepository;
 
     private Account debitAccount;
     private Account creditAccount;
 
     @BeforeEach
     void setUp() {
-        // FK-safe deletion order: run items → runs → entries → transactions → accounts
+        // FK-safe deletion order: run items → runs → entries → holds → transactions → accounts
         reconciliationRunItemRepository.deleteAllInBatch();
         reconciliationRunRepository.deleteAllInBatch();
         ledgerEntryRepository.deleteAllInBatch();
+        holdRepository.deleteAllInBatch();
         ledgerTransactionRepository.deleteAllInBatch();
         accountRepository.deleteAllInBatch();
 

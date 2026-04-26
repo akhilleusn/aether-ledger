@@ -3,6 +3,7 @@ package com.aetherledger.api;
 import com.aetherledger.domain.entity.OutboxEvent;
 import com.aetherledger.domain.enums.OutboxEventType;
 import com.aetherledger.repository.AccountRepository;
+import com.aetherledger.repository.HoldRepository;
 import com.aetherledger.repository.LedgerEntryRepository;
 import com.aetherledger.repository.LedgerTransactionRepository;
 import com.aetherledger.repository.OutboxEventRepository;
@@ -57,6 +58,7 @@ class OutboxEventTest extends AbstractIntegrationTest {
     @Autowired ReconciliationRunItemRepository reconciliationRunItemRepository;
     @Autowired ReconciliationRunRepository reconciliationRunRepository;
     @Autowired AccountRepository accountRepository;
+    @Autowired HoldRepository holdRepository;
 
     private Account alice;
     private Account bob;
@@ -68,6 +70,7 @@ class OutboxEventTest extends AbstractIntegrationTest {
         reconciliationRunItemRepository.deleteAllInBatch();
         reconciliationRunRepository.deleteAllInBatch();
         ledgerEntryRepository.deleteAllInBatch();
+        holdRepository.deleteAllInBatch();
         ledgerTransactionRepository.deleteAllInBatch();
         accountRepository.deleteAllInBatch();
 

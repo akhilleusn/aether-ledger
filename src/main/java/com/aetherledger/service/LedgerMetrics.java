@@ -126,6 +126,22 @@ public class LedgerMetrics {
     }
 
     // -------------------------------------------------------------------------
+    // Holds
+    // -------------------------------------------------------------------------
+
+    public void holdCreated() {
+        counter("aetherledger.holds.created", "Holds placed on accounts");
+    }
+
+    public void holdCaptured() {
+        counter("aetherledger.holds.captured", "Holds captured (funds moved to clearing)");
+    }
+
+    public void holdReleased() {
+        counter("aetherledger.holds.released", "Holds released (reservation cancelled)");
+    }
+
+    // -------------------------------------------------------------------------
     // Internal helper
     // -------------------------------------------------------------------------
 
