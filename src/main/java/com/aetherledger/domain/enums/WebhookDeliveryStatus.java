@@ -3,5 +3,7 @@ package com.aetherledger.domain.enums;
 public enum WebhookDeliveryStatus {
     PENDING,
     SUCCESS,
-    FAILED
+    FAILED,
+    /** All retry attempts exhausted; requires manual intervention. */
+    DEAD
 }

@@ -125,6 +125,38 @@ public class LedgerMetrics {
             .increment();
     }
 
+    public void webhookRetryAttempted(String eventType) {
+        Counter.builder("aetherledger.webhooks.retry.attempted")
+            .description("Webhook retry attempts")
+            .tag("eventType", eventType)
+            .register(registry)
+            .increment();
+    }
+
+    public void webhookRetrySucceeded(String eventType) {
+        Counter.builder("aetherledger.webhooks.retry.succeeded")
+            .description("Webhook retries that succeeded")
+            .tag("eventType", eventType)
+            .register(registry)
+            .increment();
+    }
+
+    public void webhookRetryFailed(String eventType) {
+        Counter.builder("aetherledger.webhooks.retry.failed")
+            .description("Webhook retries that failed again")
+            .tag("eventType", eventType)
+            .register(registry)
+            .increment();
+    }
+
+    public void webhookDeadLettered(String eventType) {
+        Counter.builder("aetherledger.webhooks.dead_lettered")
+            .description("Webhook deliveries moved to DEAD state")
+            .tag("eventType", eventType)
+            .register(registry)
+            .increment();
+    }
+
     // -------------------------------------------------------------------------
     // Holds
     // -------------------------------------------------------------------------

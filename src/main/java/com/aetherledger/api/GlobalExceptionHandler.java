@@ -10,6 +10,8 @@ import com.aetherledger.exception.HoldNotFoundException;
 import com.aetherledger.exception.HoldNotReleasableException;
 import com.aetherledger.exception.IdempotencyKeyConflictException;
 import com.aetherledger.exception.InvalidTransactionRequestException;
+import com.aetherledger.exception.WebhookDeliveryNotFoundException;
+import com.aetherledger.exception.WebhookDeliveryNotRetryableException;
 import com.aetherledger.exception.LedgerTransactionNotFoundException;
 import com.aetherledger.exception.TransactionAlreadyReversedException;
 import com.aetherledger.exception.TransactionNotCompletableException;
@@ -245,6 +247,26 @@ public class GlobalExceptionHandler {
 
         log.warn("Hold not releasable on {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.UNPROCESSABLE_ENTITY, "HOLD_NOT_RELEASABLE", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(WebhookDeliveryNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleWebhookDeliveryNotFound(
+            WebhookDeliveryNotFoundException ex,
+            HttpServletRequest request) {
+
+        log.warn("Webhook delivery not found on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.NOT_FOUND, "WEBHOOK_DELIVERY_NOT_FOUND", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(WebhookDeliveryNotRetryableException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    public ErrorResponse handleWebhookDeliveryNotRetryable(
+            WebhookDeliveryNotRetryableException ex,
+            HttpServletRequest request) {
+
+        log.warn("Webhook delivery not retryable on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, "WEBHOOK_DELIVERY_NOT_RETRYABLE", ex.getMessage(), request);
     }
 
     @ExceptionHandler(IdempotencyKeyConflictException.class)

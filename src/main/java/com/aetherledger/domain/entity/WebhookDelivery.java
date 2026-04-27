@@ -3,6 +3,7 @@ package com.aetherledger.domain.entity;
 import com.aetherledger.domain.enums.WebhookDeliveryStatus;
 import jakarta.persistence.*;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -25,7 +26,8 @@ import java.util.UUID;
 )
 public class WebhookDelivery {
 
-    private static final int MAX_ERROR_LENGTH = 500;
+    private static final int MAX_ERROR_LENGTH   = 500;
+    public  static final int DEFAULT_MAX_ATTEMPTS = 5;
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -57,6 +59,12 @@ public class WebhookDelivery {
     @Column(name = "last_error")
     private String lastError;
 
+    @Column(name = "max_attempts", nullable = false)
+    private int maxAttempts = DEFAULT_MAX_ATTEMPTS;
+
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -76,6 +84,7 @@ public class WebhookDelivery {
         d.payload        = event.getPayload();
         d.status         = WebhookDeliveryStatus.PENDING;
         d.attemptCount   = 0;
+        d.maxAttempts    = DEFAULT_MAX_ATTEMPTS;
         return d;
     }
 
@@ -85,15 +94,44 @@ public class WebhookDelivery {
     }
 
     public void markSuccess() {
-        this.status      = WebhookDeliveryStatus.SUCCESS;
-        this.deliveredAt = Instant.now();
+        this.status        = WebhookDeliveryStatus.SUCCESS;
+        this.deliveredAt   = Instant.now();
+        this.nextAttemptAt = null;
         this.attemptCount++;
     }
 
+    /**
+     * Records a failed delivery attempt and schedules the next retry,
+     * or transitions the delivery to {@link WebhookDeliveryStatus#DEAD} once
+     * {@link #maxAttempts} is exhausted.
+     *
+     * <p>Backoff schedule (by attempt number after this call):
+     * <pre>
+     *   1 →  1 min
+     *   2 →  5 min
+     *   3 → 15 min
+     *   4+ → 60 min
+     * </pre>
+     */
     public void markFailed(String error) {
-        this.status       = WebhookDeliveryStatus.FAILED;
         this.attemptCount++;
-        this.lastError    = truncate(error);
+        this.lastError = truncate(error);
+        if (this.attemptCount >= this.maxAttempts) {
+            this.status        = WebhookDeliveryStatus.DEAD;
+            this.nextAttemptAt = null;
+        } else {
+            this.status        = WebhookDeliveryStatus.FAILED;
+            this.nextAttemptAt = Instant.now().plus(backoffFor(this.attemptCount));
+        }
+    }
+
+    private static Duration backoffFor(int attemptNumber) {
+        return switch (attemptNumber) {
+            case 1  -> Duration.ofMinutes(1);
+            case 2  -> Duration.ofMinutes(5);
+            case 3  -> Duration.ofMinutes(15);
+            default -> Duration.ofMinutes(60);
+        };
     }
 
     private static String truncate(String s) {
@@ -109,7 +147,9 @@ public class WebhookDelivery {
     public String               getPayload()        { return payload; }
     public WebhookDeliveryStatus getStatus()        { return status; }
     public int                  getAttemptCount()   { return attemptCount; }
+    public int                  getMaxAttempts()    { return maxAttempts; }
     public String               getLastError()      { return lastError; }
+    public Instant              getNextAttemptAt()  { return nextAttemptAt; }
     public Instant              getCreatedAt()      { return createdAt; }
     public Instant              getDeliveredAt()    { return deliveredAt; }
 
