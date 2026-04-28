@@ -1,0 +1,22 @@
+# Gitleaks configuration for AetherLedger
+# https://github.com/gitleaks/gitleaks
+
+title = "AetherLedger Gitleaks Config"
+
+[extend]
+# Extend Gitleaks' built-in ruleset rather than replacing it.
+# All default secret-detection rules remain active.
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Project-level allowlists
+#
+# Add entries below for test fixtures or generated values that are safe to
+# commit and would otherwise produce false positives.  Every suppression must
+# explain why the value is not a real secret.
+# ---------------------------------------------------------------------------
+
+[[rules.allowlist]]
+  description = "Test-only internal API key — only active inside Testcontainers; carries no production access"
+  regexes = ["test-internal-api-key"]
+  paths    = ["src/test/resources/application-test.properties"]

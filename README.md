@@ -198,6 +198,19 @@ All 156 tests are full integration tests — no mocks, no H2, no in-memory subst
 
 ---
 
+## CI and security scanning
+
+Every push and pull request runs two GitHub Actions workflows:
+
+| Workflow | What it does |
+|---|---|
+| **CI** (`ci.yml`) | Compiles and runs all 293 integration tests against a real PostgreSQL instance via Testcontainers |
+| **Security** (`security.yml`) | Runs Gitleaks (secret detection across full git history) and Trivy (filesystem + dependency CVE scan, HIGH/CRITICAL only) |
+
+Trivy uses `--ignore-unfixed` so the gate only fires on vulnerabilities that have an available fix. If a finding needs to be suppressed, add a `.trivyignore` file with a dated comment explaining the decision.
+
+---
+
 ## Internal Ops API Key
 
 All endpoints under `/api/v1/ops/**` are protected by an internal API key.
