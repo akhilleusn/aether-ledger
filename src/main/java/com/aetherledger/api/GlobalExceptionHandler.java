@@ -1,6 +1,7 @@
 package com.aetherledger.api;
 
 import com.aetherledger.api.dto.ErrorResponse;
+import com.aetherledger.exception.AuditChainEntryNotFoundException;
 import com.aetherledger.exception.AccountNotFoundException;
 import com.aetherledger.exception.DuplicateAccountNameException;
 import com.aetherledger.exception.IntegritySnapshotNotFoundException;
@@ -62,6 +63,16 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AuditChainEntryNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleAuditChainEntryNotFound(
+            AuditChainEntryNotFoundException ex,
+            HttpServletRequest request) {
+
+        log.warn("Audit chain entry not found on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.NOT_FOUND, "AUDIT_CHAIN_ENTRY_NOT_FOUND", ex.getMessage(), request);
+    }
 
     @ExceptionHandler(InvalidTransactionRequestException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)

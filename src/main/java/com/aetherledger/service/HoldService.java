@@ -12,6 +12,7 @@ import com.aetherledger.exception.HoldNotReleasableException;
 import com.aetherledger.repository.AccountRepository;
 import com.aetherledger.repository.HoldRepository;
 import com.aetherledger.service.command.PostTransactionCommand;
+import static com.aetherledger.service.AuditChainService.holdPayload;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -51,6 +52,7 @@ public class HoldService {
     private final ClearingAccountProvider clearingAccountProvider;
     private final OutboxService outboxService;
     private final LedgerMetrics ledgerMetrics;
+    private final AuditChainService auditChainService;
 
     // -------------------------------------------------------------------------
     // Create
@@ -76,6 +78,9 @@ public class HoldService {
             hold.getId(), accountId, amount, referenceId);
         outboxService.publishHoldCreated(hold);
         ledgerMetrics.holdCreated();
+        auditChainService.append("HOLD_CREATED", "HOLD", hold.getId(),
+            holdPayload(hold.getId(), hold.getReferenceId(), hold.getAccountId(),
+                hold.getAmount().toPlainString(), "ACTIVE"));
         return hold;
     }
 
@@ -117,6 +122,9 @@ public class HoldService {
         log.info("Hold captured: holdId={} ledgerTxId={}", hold.getId(), ledgerTx.getId());
         outboxService.publishHoldCaptured(hold);
         ledgerMetrics.holdCaptured();
+        auditChainService.append("HOLD_CAPTURED", "HOLD", hold.getId(),
+            holdPayload(hold.getId(), hold.getReferenceId(), hold.getAccountId(),
+                hold.getAmount().toPlainString(), "CAPTURED"));
         return hold;
     }
 
@@ -138,6 +146,9 @@ public class HoldService {
         log.info("Hold released: holdId={}", hold.getId());
         outboxService.publishHoldReleased(hold);
         ledgerMetrics.holdReleased();
+        auditChainService.append("HOLD_RELEASED", "HOLD", hold.getId(),
+            holdPayload(hold.getId(), hold.getReferenceId(), hold.getAccountId(),
+                hold.getAmount().toPlainString(), "RELEASED"));
         return hold;
     }
 }

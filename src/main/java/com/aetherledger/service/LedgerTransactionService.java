@@ -18,6 +18,7 @@ import com.aetherledger.repository.LedgerEntryRepository;
 import com.aetherledger.repository.LedgerTransactionRepository;
 import com.aetherledger.service.command.PostTransactionCommand;
 import com.aetherledger.service.command.ReverseTransactionCommand;
+import static com.aetherledger.service.AuditChainService.transactionPayload;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -66,6 +67,7 @@ public class LedgerTransactionService {
     private final LedgerEntryRepository ledgerEntryRepository;
     private final OutboxService outboxService;
     private final LedgerMetrics ledgerMetrics;
+    private final AuditChainService auditChainService;
 
     /**
      * Posts a double-entry ledger transaction atomically.
@@ -130,6 +132,10 @@ public class LedgerTransactionService {
         ledgerMetrics.transactionPosted();
         outboxService.publishTransactionPosted(
             ledgerTx, command.debitAccountId(), command.creditAccountId(), command.amount());
+        auditChainService.append("TRANSACTION_POSTED", "LEDGER_TRANSACTION", ledgerTx.getId(),
+            transactionPayload(ledgerTx.getId(), ledgerTx.getReferenceId(), "SUCCESS",
+                command.amount().toPlainString(),
+                command.debitAccountId(), command.creditAccountId()));
 
         return ledgerTx;
     }
@@ -177,6 +183,10 @@ public class LedgerTransactionService {
         log.info("Pending transaction created: id={} referenceId='{}' debitAccountId={} creditAccountId={} amount={}",
             tx.getId(), tx.getReferenceId(),
             command.debitAccountId(), command.creditAccountId(), command.amount());
+        auditChainService.append("TRANSACTION_PENDING_CREATED", "LEDGER_TRANSACTION", tx.getId(),
+            transactionPayload(tx.getId(), tx.getReferenceId(), "PENDING",
+                command.amount().toPlainString(),
+                command.debitAccountId(), command.creditAccountId()));
 
         return tx;
     }
@@ -214,6 +224,10 @@ public class LedgerTransactionService {
 
         ledgerMetrics.transactionCompleted();
         outboxService.publishTransactionCompleted(tx);
+        auditChainService.append("TRANSACTION_COMPLETED", "LEDGER_TRANSACTION", tx.getId(),
+            transactionPayload(tx.getId(), tx.getReferenceId(), "SUCCESS",
+                tx.getAmount().toPlainString(),
+                tx.getDebitAccountId(), tx.getCreditAccountId()));
 
         return tx;
     }
@@ -243,6 +257,10 @@ public class LedgerTransactionService {
             tx.getId(), tx.getReferenceId());
 
         ledgerMetrics.transactionFailed();
+        auditChainService.append("TRANSACTION_FAILED", "LEDGER_TRANSACTION", tx.getId(),
+            transactionPayload(tx.getId(), tx.getReferenceId(), "FAILED",
+                tx.getAmount().toPlainString(),
+                tx.getDebitAccountId(), tx.getCreditAccountId()));
         return ledgerTransactionRepository.findByIdWithEntries(transactionId).orElseThrow(
             () -> new LedgerTransactionNotFoundException("id", transactionId.toString()));
     }
@@ -338,6 +356,13 @@ public class LedgerTransactionService {
 
         ledgerMetrics.transactionReversed();
         outboxService.publishTransactionReversed(reversal);
+        // Reversal debits the original credit account and credits the original debit account.
+        // Use the entry-derived account objects because debitAccountId/creditAccountId on
+        // the original LedgerTransaction are only populated for two-phase (PENDING) transactions.
+        auditChainService.append("TRANSACTION_REVERSED", "LEDGER_TRANSACTION", reversal.getId(),
+            transactionPayload(reversal.getId(), reversal.getReferenceId(), "SUCCESS",
+                positiveAmount.toPlainString(),
+                creditAccount.getId(), debitAccount.getId()));
 
         return reversal;
     }
@@ -380,6 +405,12 @@ public class LedgerTransactionService {
             () -> new LedgerTransactionNotFoundException("id", transactionId.toString()));
 
         outboxService.publishTransactionReconciled(tx);
+        auditChainService.append("TRANSACTION_RECONCILED", "LEDGER_TRANSACTION", tx.getId(),
+            "txId=" + tx.getId()
+            + "|ref=" + tx.getReferenceId()
+            + "|externalRef=" + externalReferenceId
+            + "|externalStatus=" + externalStatus
+            + "|result=" + result);
 
         return tx;
     }
