@@ -6,6 +6,7 @@ import com.aetherledger.domain.entity.LedgerTransaction;
 import com.aetherledger.domain.enums.AccountType;
 import com.aetherledger.repository.AccountRepository;
 import com.aetherledger.repository.HoldRepository;
+import com.aetherledger.repository.IntegritySnapshotRepository;
 import com.aetherledger.repository.LedgerEntryRepository;
 import com.aetherledger.repository.LedgerTransactionRepository;
 import com.aetherledger.repository.ReconciliationRunItemRepository;
@@ -40,22 +41,25 @@ class OpsControllerTest extends AbstractIntegrationTest {
     private static final String LEDGER_REPORT_ENDPOINT  = "/api/v1/ops/integrity/ledger";
     private static final String LEDGER_ISSUES_ENDPOINT  = "/api/v1/ops/integrity/ledger/issues";
     private static final String RECON_HEALTH_ENDPOINT   = "/api/v1/ops/integrity/reconciliation";
+    private static final String SNAPSHOTS_ENDPOINT      = "/api/v1/ops/integrity/snapshots";
     private static final String TX_ENDPOINT             = "/api/v1/ledger-transactions";
 
-    @Autowired MockMvc                      mockMvc;
-    @Autowired ObjectMapper                 objectMapper;
-    @Autowired AccountRepository            accountRepository;
-    @Autowired HoldRepository               holdRepository;
-    @Autowired LedgerTransactionRepository  ledgerTransactionRepository;
-    @Autowired LedgerEntryRepository        ledgerEntryRepository;
+    @Autowired MockMvc                        mockMvc;
+    @Autowired ObjectMapper                   objectMapper;
+    @Autowired AccountRepository              accountRepository;
+    @Autowired HoldRepository                 holdRepository;
+    @Autowired IntegritySnapshotRepository    integritySnapshotRepository;
+    @Autowired LedgerTransactionRepository    ledgerTransactionRepository;
+    @Autowired LedgerEntryRepository          ledgerEntryRepository;
     @Autowired ReconciliationRunItemRepository reconciliationRunItemRepository;
-    @Autowired ReconciliationRunRepository  reconciliationRunRepository;
+    @Autowired ReconciliationRunRepository    reconciliationRunRepository;
 
     private Account accountA;
     private Account accountB;
 
     @BeforeEach
     void setUp() {
+        integritySnapshotRepository.deleteAllInBatch();
         reconciliationRunItemRepository.deleteAllInBatch();
         reconciliationRunRepository.deleteAllInBatch();
         ledgerEntryRepository.deleteAllInBatch();
@@ -333,6 +337,106 @@ class OpsControllerTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.mismatchCount").value(1))
                 .andExpect(jsonPath("$.notReconciledCount").value(1))
                 .andExpect(jsonPath("$.healthy").value(false));
+        }
+    }
+
+    // =========================================================================
+    // POST /api/v1/ops/integrity/snapshots
+    // GET  /api/v1/ops/integrity/snapshots
+    // GET  /api/v1/ops/integrity/snapshots/{id}
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Integrity snapshots")
+    class IntegritySnapshots {
+
+        @Test
+        @DisplayName("POST creates a snapshot with correct counts on empty ledger")
+        void emptyLedger_snapshotHealthyWithZeroCounts() throws Exception {
+            mockMvc.perform(post(SNAPSHOTS_ENDPOINT))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.generatedAt").isNotEmpty())
+                .andExpect(jsonPath("$.healthy").value(true))
+                .andExpect(jsonPath("$.totalTransactions").value(0))
+                .andExpect(jsonPath("$.successCount").value(0))
+                .andExpect(jsonPath("$.pendingCount").value(0))
+                .andExpect(jsonPath("$.failedCount").value(0));
+        }
+
+        @Test
+        @DisplayName("POST captures live counts across mixed transaction states")
+        void mixedTransactions_snapshotCountsMatchLive() throws Exception {
+            postTransaction("REF-SNAP-SUCCESS");
+            createPendingTransaction("REF-SNAP-PENDING");
+            String toFail = createPendingTransaction("REF-SNAP-FAIL");
+            mockMvc.perform(post(TX_ENDPOINT + "/{id}/fail", toFail))
+                .andExpect(status().isOk());
+
+            mockMvc.perform(post(SNAPSHOTS_ENDPOINT))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalTransactions").value(3))
+                .andExpect(jsonPath("$.successCount").value(1))
+                .andExpect(jsonPath("$.pendingCount").value(1))
+                .andExpect(jsonPath("$.failedCount").value(1))
+                .andExpect(jsonPath("$.healthy").value(true));
+        }
+
+        @Test
+        @DisplayName("POST marks snapshot unhealthy when ledger has a zero-sum violation")
+        void zeroSumViolation_snapshotUnhealthy() throws Exception {
+            seedZeroSumViolation("REF-SNAP-VIOLATION");
+
+            mockMvc.perform(post(SNAPSHOTS_ENDPOINT))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.healthy").value(false));
+        }
+
+        @Test
+        @DisplayName("GET list returns empty array when no snapshots exist")
+        void listSnapshots_emptyWhenNone() throws Exception {
+            mockMvc.perform(get(SNAPSHOTS_ENDPOINT))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+        }
+
+        @Test
+        @DisplayName("GET list returns all snapshots, newest first")
+        void listSnapshots_newestFirst() throws Exception {
+            mockMvc.perform(post(SNAPSHOTS_ENDPOINT)).andExpect(status().isCreated());
+            postTransaction("REF-SNAP-ORDER");
+            mockMvc.perform(post(SNAPSHOTS_ENDPOINT)).andExpect(status().isCreated());
+
+            mockMvc.perform(get(SNAPSHOTS_ENDPOINT))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].totalTransactions").value(1))
+                .andExpect(jsonPath("$[1].totalTransactions").value(0));
+        }
+
+        @Test
+        @DisplayName("GET by id returns the persisted snapshot")
+        void getById_returnsSnapshot() throws Exception {
+            var created = mockMvc.perform(post(SNAPSHOTS_ENDPOINT))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+            String id = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("id").asText();
+
+            mockMvc.perform(get(SNAPSHOTS_ENDPOINT + "/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.generatedAt").isNotEmpty())
+                .andExpect(jsonPath("$.healthy").isBoolean());
+        }
+
+        @Test
+        @DisplayName("GET by unknown id returns 404 INTEGRITY_SNAPSHOT_NOT_FOUND")
+        void getById_unknownId_returns404() throws Exception {
+            mockMvc.perform(get(SNAPSHOTS_ENDPOINT + "/{id}", java.util.UUID.randomUUID()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("INTEGRITY_SNAPSHOT_NOT_FOUND"));
         }
     }
 

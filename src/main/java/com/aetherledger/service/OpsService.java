@@ -1,10 +1,14 @@
 package com.aetherledger.service;
 
+import com.aetherledger.api.dto.IntegritySnapshotResponse;
 import com.aetherledger.api.dto.LedgerIntegrityReportResponse;
 import com.aetherledger.api.dto.LedgerIssueResponse;
 import com.aetherledger.api.dto.ReconciliationHealthResponse;
+import com.aetherledger.domain.entity.IntegritySnapshot;
 import com.aetherledger.domain.entity.LedgerTransaction;
 import com.aetherledger.domain.enums.TransactionStatus;
+import com.aetherledger.exception.IntegritySnapshotNotFoundException;
+import com.aetherledger.repository.IntegritySnapshotRepository;
 import com.aetherledger.repository.LedgerTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Computes operational observability reports for the ledger and reconciliation subsystems.
@@ -27,7 +32,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OpsService {
 
-    private final LedgerTransactionRepository ledgerTransactionRepository;
+    private final LedgerTransactionRepository  ledgerTransactionRepository;
+    private final IntegritySnapshotRepository  integritySnapshotRepository;
 
     // -------------------------------------------------------------------------
     // Ledger integrity
@@ -90,6 +96,54 @@ public class OpsService {
             ));
         }
         return issues;
+    }
+
+    // -------------------------------------------------------------------------
+    // Integrity snapshots
+    // -------------------------------------------------------------------------
+
+    @Transactional
+    public IntegritySnapshotResponse createIntegritySnapshot() {
+        long total      = ledgerTransactionRepository.count();
+        long successful = ledgerTransactionRepository.countByStatus(TransactionStatus.SUCCESS);
+        long pending    = ledgerTransactionRepository.countByStatus(TransactionStatus.PENDING);
+        long failed     = ledgerTransactionRepository.countByStatus(TransactionStatus.FAILED);
+        long zeroSum    = ledgerTransactionRepository.countZeroSumViolations();
+        long unexpEntry = ledgerTransactionRepository.countUnexpectedEntryCount();
+        boolean healthy = zeroSum == 0 && unexpEntry == 0;
+
+        IntegritySnapshot snapshot = IntegritySnapshot.create(healthy, total, successful, pending, failed);
+        snapshot = integritySnapshotRepository.save(snapshot);
+
+        log.info("Integrity snapshot created: id={} healthy={} total={}", snapshot.getId(), healthy, total);
+        return toResponse(snapshot);
+    }
+
+    @Transactional(readOnly = true)
+    public List<IntegritySnapshotResponse> listIntegritySnapshots() {
+        return integritySnapshotRepository.findAllByOrderByGeneratedAtDesc()
+            .stream()
+            .map(this::toResponse)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public IntegritySnapshotResponse getIntegritySnapshot(UUID id) {
+        return integritySnapshotRepository.findById(id)
+            .map(this::toResponse)
+            .orElseThrow(() -> new IntegritySnapshotNotFoundException(id));
+    }
+
+    private IntegritySnapshotResponse toResponse(IntegritySnapshot s) {
+        return new IntegritySnapshotResponse(
+            s.getId(),
+            s.getGeneratedAt(),
+            s.isHealthy(),
+            s.getTotalTransactions(),
+            s.getSuccessCount(),
+            s.getPendingCount(),
+            s.getFailedCount()
+        );
     }
 
     // -------------------------------------------------------------------------

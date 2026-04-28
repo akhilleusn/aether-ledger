@@ -3,6 +3,7 @@ package com.aetherledger.api;
 import com.aetherledger.api.dto.ErrorResponse;
 import com.aetherledger.exception.AccountNotFoundException;
 import com.aetherledger.exception.DuplicateAccountNameException;
+import com.aetherledger.exception.IntegritySnapshotNotFoundException;
 import com.aetherledger.exception.DuplicateHoldReferenceIdException;
 import com.aetherledger.exception.DuplicateReferenceIdException;
 import com.aetherledger.exception.HoldNotCapturableException;
@@ -197,6 +198,16 @@ public class GlobalExceptionHandler {
 
         log.warn("Reconciliation run not found on {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.NOT_FOUND, "RECONCILIATION_RUN_NOT_FOUND", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(IntegritySnapshotNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleIntegritySnapshotNotFound(
+            IntegritySnapshotNotFoundException ex,
+            HttpServletRequest request) {
+
+        log.warn("Integrity snapshot not found on {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.NOT_FOUND, "INTEGRITY_SNAPSHOT_NOT_FOUND", ex.getMessage(), request);
     }
 
     @ExceptionHandler(WebhookSubscriptionNotFoundException.class)
