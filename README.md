@@ -198,6 +198,31 @@ All 156 tests are full integration tests — no mocks, no H2, no in-memory subst
 
 ---
 
+## Internal Ops API Key
+
+All endpoints under `/api/v1/ops/**` are protected by an internal API key.
+The key is supplied via the `INTERNAL_API_KEY` environment variable and must be included in every request as the `X-Internal-Api-Key` header.
+
+**Example:**
+
+```bash
+curl -H "X-Internal-Api-Key: your-dev-key" \
+  http://localhost:8080/api/v1/ops/ledger-integrity/chain/latest
+```
+
+| Scenario | Response |
+|---|---|
+| Header missing | `401 UNAUTHORIZED` |
+| Header value incorrect | `401 UNAUTHORIZED` |
+| `INTERNAL_API_KEY` not set in environment | `401 UNAUTHORIZED` (fail-closed) |
+| Header value correct | Request proceeds normally |
+
+Normal ledger endpoints (`/api/v1/accounts`, `/api/v1/ledger-transactions`, etc.) and the Swagger UI do **not** require this header.
+
+> **Security note:** never commit a real `INTERNAL_API_KEY` value. Keep it in `.env` (which is git-ignored) or inject it through your secrets manager.
+
+---
+
 ## API quick reference
 
 ### Create an account

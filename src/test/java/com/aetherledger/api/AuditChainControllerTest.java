@@ -14,13 +14,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -32,7 +33,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
-@AutoConfigureMockMvc
 @ActiveProfiles("test")
 @DisplayName("AuditChainController")
 class AuditChainControllerTest extends AbstractIntegrationTest {
@@ -44,8 +44,9 @@ class AuditChainControllerTest extends AbstractIntegrationTest {
     private static final String TX_ENDPOINT     = "/api/v1/ledger-transactions";
     private static final String HOLDS_ENDPOINT  = "/api/v1/holds";
 
-    @Autowired MockMvc                       mockMvc;
+    @Autowired WebApplicationContext         wac;
     @Autowired ObjectMapper                  objectMapper;
+    MockMvc                                  mockMvc;
     @Autowired AccountRepository             accountRepository;
     @Autowired LedgerTransactionRepository   ledgerTransactionRepository;
     @Autowired LedgerEntryRepository         ledgerEntryRepository;
@@ -59,6 +60,10 @@ class AuditChainControllerTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(wac)
+            .defaultRequest(get("/").header(InternalApiKeyInterceptor.HEADER_NAME, "test-internal-api-key"))
+            .build();
+
         // ledger_audit_chain has no FK constraints — safe to clear at any point
         auditChainRepository.deleteAllInBatch();
         outboxEventRepository.deleteAllInBatch();

@@ -17,11 +17,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -33,7 +34,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
-@AutoConfigureMockMvc
 @ActiveProfiles("test")
 @DisplayName("OpsController")
 class OpsControllerTest extends AbstractIntegrationTest {
@@ -44,8 +44,9 @@ class OpsControllerTest extends AbstractIntegrationTest {
     private static final String SNAPSHOTS_ENDPOINT      = "/api/v1/ops/integrity/snapshots";
     private static final String TX_ENDPOINT             = "/api/v1/ledger-transactions";
 
-    @Autowired MockMvc                        mockMvc;
+    @Autowired WebApplicationContext           wac;
     @Autowired ObjectMapper                   objectMapper;
+    MockMvc                                   mockMvc;
     @Autowired AccountRepository              accountRepository;
     @Autowired HoldRepository                 holdRepository;
     @Autowired IntegritySnapshotRepository    integritySnapshotRepository;
@@ -59,6 +60,10 @@ class OpsControllerTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(wac)
+            .defaultRequest(get("/").header(InternalApiKeyInterceptor.HEADER_NAME, "test-internal-api-key"))
+            .build();
+
         integritySnapshotRepository.deleteAllInBatch();
         reconciliationRunItemRepository.deleteAllInBatch();
         reconciliationRunRepository.deleteAllInBatch();
