@@ -127,11 +127,11 @@ Account rows are locked with `SELECT ... FOR UPDATE` before any balance-affectin
 | Layer | Technology |
 |---|---|
 | Language | Java 17 |
-| Framework | Spring Boot 3.2.5 |
+| Framework | Spring Boot 3.5.14 |
 | Persistence | Spring Data JPA + Hibernate |
 | Database | PostgreSQL 16 |
 | Schema management | Flyway |
-| API documentation | springdoc-openapi 2.5.0 (Swagger UI) |
+| API documentation | springdoc-openapi 2.6.0 (Swagger UI) |
 | Build tool | Maven |
 | Containerisation | Docker + Docker Compose |
 | Test database | Testcontainers (PostgreSQL 16-alpine) |
