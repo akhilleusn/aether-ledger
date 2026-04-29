@@ -26,6 +26,39 @@ Off-the-shelf ledger systems are opaque, vendor-locked, or insufficiently flexib
 
 The design is directly informed by patterns used in production ledgers at companies like Stripe, Brex, and Shopify Pay.
 
+### System overview
+
+```mermaid
+flowchart TB
+    CL(["API Client / Swagger UI"])
+
+    subgraph APP["Spring Boot 3.5"]
+        CTL["Controllers\n(REST API)"]
+        OPS["Ops Interceptor\n(X-Internal-Api-Key)"]
+        SVC["Service Layer"]
+        AUD["Audit Chain\n(SHA-256 hash chain)"]
+        OUT["Outbox Relay\n(@Scheduled)"]
+        WH["Webhook Delivery\n(Retry + DLQ)"]
+        REP["Repositories\n(Spring Data JPA)"]
+    end
+
+    DB[("PostgreSQL 16\n(Flyway migrations)")]
+    EXT(["External Subscribers"])
+    GH(["GitHub Actions\n(CI · Gitleaks · Trivy)"])
+
+    CL -->|HTTP/JSON| CTL
+    OPS -->|guards ops endpoints| CTL
+    CTL --> SVC
+    SVC --> REP
+    SVC --> AUD
+    SVC --> OUT
+    AUD --> REP
+    OUT --> WH
+    WH -->|HTTP POST| EXT
+    REP --> DB
+    GH -.->|push / PR| APP
+```
+
 ---
 
 ## Core domain concepts
@@ -107,6 +140,34 @@ Ledger entries and reconciliation run records are write-once. All JPA columns on
 ### Concurrency safety
 
 Account rows are locked with `SELECT ... FOR UPDATE` before any balance-affecting write. To prevent deadlocks between concurrent transactions touching the same two accounts in opposite order, locks are always acquired in ascending UUID order — a standard technique for imposing a global lock-acquisition sequence.
+
+### Immediate transaction flow
+
+```mermaid
+sequenceDiagram
+    participant C  as Client
+    participant CTL as Controller
+    participant SVC as LedgerTransactionService
+    participant DB  as PostgreSQL
+
+    C->>CTL: POST /ledger-transactions
+    CTL->>SVC: post(command)
+    SVC->>DB: existsByReferenceId?
+
+    alt referenceId already used
+        DB-->>SVC: found
+        SVC-->>C: 409 CONFLICT
+    else new request
+        SVC->>DB: SELECT FOR UPDATE (both accounts, ascending UUID order)
+        SVC->>SVC: create LedgerTransaction + 2 LedgerEntry
+        SVC->>SVC: assert zero-sum invariant
+        SVC->>DB: INSERT tx + entries + outbox_event + audit_chain
+        Note right of DB: single atomic commit
+        DB-->>SVC: committed
+        SVC-->>CTL: LedgerTransaction
+        CTL-->>C: 201 Created
+    end
+```
 
 ---
 

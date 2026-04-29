@@ -235,6 +235,32 @@ POST /api/v1/ledger-transactions
 and no entries. `POST /{id}/complete` writes the entries and transitions to SUCCESS.
 `POST /{id}/fail` transitions to FAILED with no entries written.
 
+```mermaid
+sequenceDiagram
+    participant C  as Client
+    participant CTL as Controller
+    participant SVC as LedgerTransactionService
+    participant DB  as PostgreSQL
+
+    C->>CTL: POST /ledger-transactions
+    CTL->>SVC: post(command)
+    SVC->>DB: existsByReferenceId?
+
+    alt referenceId already used
+        DB-->>SVC: found
+        SVC-->>C: 409 CONFLICT
+    else new request
+        SVC->>DB: SELECT FOR UPDATE (both accounts, ascending UUID order)
+        SVC->>SVC: create LedgerTransaction + 2 LedgerEntry
+        SVC->>SVC: assert zero-sum invariant
+        SVC->>DB: INSERT tx + entries + outbox_event + audit_chain
+        Note right of DB: single atomic commit
+        DB-->>SVC: committed
+        SVC-->>CTL: LedgerTransaction
+        CTL-->>C: 201 Created
+    end
+```
+
 ---
 
 ### 6.3 Reverse a transaction
