@@ -64,13 +64,7 @@ class OpsControllerTest extends AbstractIntegrationTest {
             .defaultRequest(get("/").header(InternalApiKeyInterceptor.HEADER_NAME, "test-internal-api-key"))
             .build();
 
-        integritySnapshotRepository.deleteAllInBatch();
-        reconciliationRunItemRepository.deleteAllInBatch();
-        reconciliationRunRepository.deleteAllInBatch();
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
 
         accountA = accountRepository.save(Account.of("Ops – Alpha",  AccountType.SYSTEM));
         accountB = accountRepository.save(Account.of("Ops – Beta",   AccountType.SYSTEM));

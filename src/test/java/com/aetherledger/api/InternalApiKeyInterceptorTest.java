@@ -42,9 +42,7 @@ class InternalApiKeyInterceptorTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Ensure the chain is empty so /latest returns 404 (not 200) when key is correct,
-        // making the "allowed" assertions deterministic.
-        auditChainRepository.deleteAllInBatch();
+        resetDatabase();
     }
 
     // =========================================================================

@@ -46,11 +46,7 @@ class AccountControllerTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Delete in FK-safe order: entries → holds → transactions → accounts
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
     }
 
     // =========================================================================

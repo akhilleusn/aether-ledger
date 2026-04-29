@@ -49,9 +49,7 @@ class OutboxRelayRetryTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        webhookDeliveryRepository.deleteAllInBatch();
-        webhookSubscriptionRepository.deleteAllInBatch();
-        outboxEventRepository.deleteAllInBatch();
+        resetDatabase();
         reset(publisher);
     }
 

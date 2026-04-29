@@ -64,13 +64,7 @@ class AuditChainControllerTest extends AbstractIntegrationTest {
             .defaultRequest(get("/").header(InternalApiKeyInterceptor.HEADER_NAME, "test-internal-api-key"))
             .build();
 
-        // ledger_audit_chain has no FK constraints — safe to clear at any point
-        auditChainRepository.deleteAllInBatch();
-        outboxEventRepository.deleteAllInBatch();
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
 
         accountA = accountRepository.save(Account.of("Chain-A", AccountType.SYSTEM));
         accountB = accountRepository.save(Account.of("Chain-B", AccountType.SYSTEM));

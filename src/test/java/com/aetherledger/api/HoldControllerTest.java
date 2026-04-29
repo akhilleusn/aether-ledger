@@ -57,11 +57,7 @@ class HoldControllerTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        outboxEventRepository.deleteAllInBatch();
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
 
         alice = accountRepository.save(Account.of("Alice Wallet", AccountType.USER));
     }

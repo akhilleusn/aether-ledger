@@ -64,10 +64,7 @@ class ConcurrentModificationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
 
         debitAccount  = accountRepository.save(Account.of("Concurrent – Alice", AccountType.USER));
         creditAccount = accountRepository.save(Account.of("Concurrent – Bob",   AccountType.USER));

@@ -38,8 +38,7 @@ class WebhookSubscriptionControllerTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        deliveryRepository.deleteAllInBatch();
-        subscriptionRepository.deleteAllInBatch();
+        resetDatabase();
     }
 
     // =========================================================================

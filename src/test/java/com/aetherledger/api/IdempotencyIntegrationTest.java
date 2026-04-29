@@ -64,11 +64,7 @@ class IdempotencyIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        idempotencyRecordRepository.deleteAllInBatch();
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
 
         alice = accountRepository.save(Account.of("Idempotency – Alice", AccountType.USER));
         bob   = accountRepository.save(Account.of("Idempotency – Bob",   AccountType.USER));

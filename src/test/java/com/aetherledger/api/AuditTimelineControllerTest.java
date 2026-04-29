@@ -64,12 +64,7 @@ class AuditTimelineControllerTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        reconciliationRunItemRepository.deleteAllInBatch();
-        reconciliationRunRepository.deleteAllInBatch();
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
 
         alice = accountRepository.save(Account.of("Alice Wallet", AccountType.USER));
         bob   = accountRepository.save(Account.of("Bob Wallet",   AccountType.USER));

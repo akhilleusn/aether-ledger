@@ -75,13 +75,7 @@ class WebhookRetryIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        deliveryRepository.deleteAllInBatch();
-        subscriptionRepository.deleteAllInBatch();
-        outboxEventRepository.deleteAllInBatch();
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
 
         alice = accountRepository.save(Account.of("Retry – Alice", AccountType.USER));
         bob   = accountRepository.save(Account.of("Retry – Bob",   AccountType.USER));

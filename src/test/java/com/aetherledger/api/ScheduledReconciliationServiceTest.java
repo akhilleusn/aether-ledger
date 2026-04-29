@@ -70,13 +70,7 @@ class ScheduledReconciliationServiceTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // FK-safe deletion order: run items → runs → entries → holds → transactions → accounts
-        reconciliationRunItemRepository.deleteAllInBatch();
-        reconciliationRunRepository.deleteAllInBatch();
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
 
         debitAccount  = accountRepository.save(Account.of("Sched – Alice", AccountType.USER));
         creditAccount = accountRepository.save(Account.of("Sched – Bob",   AccountType.USER));

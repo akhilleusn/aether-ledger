@@ -65,14 +65,7 @@ class OutboxEventTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Outbox has no FKs, so it can be wiped first in any order.
-        outboxEventRepository.deleteAllInBatch();
-        reconciliationRunItemRepository.deleteAllInBatch();
-        reconciliationRunRepository.deleteAllInBatch();
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
 
         alice = accountRepository.save(Account.of("Outbox – Alice", AccountType.USER));
         bob   = accountRepository.save(Account.of("Outbox – Bob",   AccountType.USER));

@@ -60,11 +60,7 @@ class LedgerTransactionControllerTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Delete in FK-safe order: entries → holds → transactions → accounts
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
 
         debitAccount  = accountRepository.save(Account.of("Wallet – Alice", AccountType.USER));
         creditAccount = accountRepository.save(Account.of("Wallet – Bob",   AccountType.USER));

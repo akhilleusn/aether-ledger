@@ -56,12 +56,7 @@ class ReconciliationControllerTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        reconciliationRunItemRepository.deleteAllInBatch();
-        reconciliationRunRepository.deleteAllInBatch();
-        ledgerEntryRepository.deleteAllInBatch();
-        holdRepository.deleteAllInBatch();
-        ledgerTransactionRepository.deleteAllInBatch();
-        accountRepository.deleteAllInBatch();
+        resetDatabase();
 
         debitAccount  = accountRepository.save(Account.of("Reconcile – Debit",  AccountType.SYSTEM));
         creditAccount = accountRepository.save(Account.of("Reconcile – Credit", AccountType.SYSTEM));
