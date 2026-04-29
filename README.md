@@ -190,7 +190,7 @@ The test suite uses **Testcontainers** to run all integration tests against a re
 mvn test
 ```
 
-All 156 tests are full integration tests — no mocks, no H2, no in-memory substitutes. Flyway applies every migration against the container before any test run, so the schema is byte-for-byte identical to production.
+All 293 tests are full integration tests — no mocks, no H2, no in-memory substitutes. Flyway applies every migration against the container before any test run, so the schema is byte-for-byte identical to production.
 
 **Test isolation:** each test class cleans up its own data in `@BeforeEach` in foreign-key-safe order. A single PostgreSQL container is shared across all test classes within a run, and Spring's context cache reuses one application context, keeping the suite fast.
 
