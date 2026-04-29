@@ -5,6 +5,12 @@ Designed to model the core transaction, reconciliation, and audit capabilities f
 
 ---
 
+## Documentation
+
+- [Project Walkthrough](docs/PROJECT_WALKTHROUGH.md)
+- [Architecture](docs/architecture.md)
+- [Portfolio Technical Brief](PORTFOLIO.md)
+
 ## Why this project exists
 
 Every payment company, neobank, and marketplace eventually needs a ledger: a system of record that tracks who owns what, enforces that money is never created or destroyed, and produces an auditable trail of every movement.
