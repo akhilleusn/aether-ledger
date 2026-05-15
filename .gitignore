@@ -4,3 +4,15 @@ target/
 .vscode/
 .env
 .claude/settings.local.json
+
+# Local secrets / config
+*.env
+.env.*
+application-local.properties
+application-local.yml
+application-dev.properties
+application-dev.yml
+
+# Build / logs
+logs/
+*.log
