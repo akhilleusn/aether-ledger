@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: aetherledger
       POSTGRES_USER: ${DB_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -24,7 +24,7 @@ services:
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/aetherledger
       DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
     ports:
       - "8080:8080"
     healthcheck:
