@@ -215,7 +215,7 @@ sequenceDiagram
 Requires Docker Desktop or any Docker Engine with Compose v2.
 
 ```bash
-# Optional: set credentials (defaults to postgres/postgres)
+# Optional: set credentials (defaults to postgres/changeme for local demo)
 cp .env.example .env
 # edit .env with your preferred DB_USERNAME and DB_PASSWORD
 
